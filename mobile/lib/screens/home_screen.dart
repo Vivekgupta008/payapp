@@ -22,7 +22,7 @@ class HomeScreen extends StatefulWidget {
 class HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
 
-  void serTab(int index){
+  void setTab(int index){
     setState(() => _currentIndex=index);
   }
 
