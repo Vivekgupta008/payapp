@@ -113,11 +113,12 @@ class QrTransferService {
     required String merchantId,
     required String merchantName,
   }) {
+    final senderName = paymentData['sender_name'] as String? ?? 'User';
     return OfflineTransaction(
       tokenId: paymentData['token_id'],
       senderId: paymentData['user_id'],
       receiverId: merchantId,
-      receiverName: merchantName,
+      receiverName: senderName,
       amount: (paymentData['amount'] as num).toDouble(),
       nonce: paymentData['nonce'],
       signature: paymentData['signature'],

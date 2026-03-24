@@ -8,6 +8,7 @@ import '../../widgets/balance_card.dart';
 import '../../widgets/transaction_tile.dart';
 import '../../widgets/sync_indicator.dart';
 import '../../config/theme.dart';
+import '../home_screen.dart';
 
 class UserDashboard extends StatelessWidget {
   const UserDashboard({super.key});
@@ -109,11 +110,7 @@ class UserDashboard extends StatelessWidget {
                     label: 'Pay',
                     color: AppTheme.secondaryColor,
                     onTap: () {
-                      // Navigate to pay tab (index 1)
-                      final homeState = context.findAncestorStateOfType<State>();
-                      if (homeState != null) {
-                        // Use the bottom nav bar
-                      }
+                      context.findAncestorStateOfType<HomeScreenState>()?.setTab(1);
                     },
                   ),
                 ),
@@ -123,7 +120,9 @@ class UserDashboard extends StatelessWidget {
                     icon: Icons.account_balance_wallet,
                     label: 'Tokens',
                     color: AppTheme.accentColor,
-                    onTap: () {},
+                    onTap: () {
+                      context.findAncestorStateOfType<HomeScreenState>()?.setTab(2);
+                    },
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -154,7 +153,9 @@ class UserDashboard extends StatelessWidget {
                 ),
                 if (txProvider.allTransactions.isNotEmpty)
                   TextButton(
-                    onPressed: () {},
+                    onPressed: () {
+                      context.findAncestorStateOfType<HomeScreenState>()?.setTab(3);
+                    },
                     child: const Text('See All'),
                   ),
               ],

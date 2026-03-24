@@ -26,8 +26,8 @@ class SyncService {
   void startMonitoring() {
     _connectivitySub?.cancel();
     _connectivitySub = _connectivity.onConnectivityChanged.listen(
-      (result) {
-  final hasConnection = result != ConnectivityResult.none;
+      (results) {
+  final hasConnection = results.any((r)=> r != ConnectivityResult.none);
         if (hasConnection) {
           syncPendingTransactions();
         }
@@ -52,8 +52,8 @@ class SyncService {
 
   /// Check if device is currently online
   Future<bool> isOnline() async {
-    final result = await _connectivity.checkConnectivity();
-    return result != ConnectivityResult.none;
+    final results = await _connectivity.checkConnectivity();
+    return results.any((r)=> r != ConnectivityResult.none);
   }
 
   /// Sync all pending offline transactions to the backend

@@ -16,11 +16,15 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<HomeScreen> createState() => HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+
+  void serTab(int index){
+    setState(() => _currentIndex=index);
+  }
 
   @override
   void initState() {
@@ -45,7 +49,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // If online, request fresh tokens
     if (wallet.isOnline) {
-      await wallet.requestTokens();
+      if(auth.isUser){
+        await wallet.requestTokens();
+      }
       await txProvider.fetchServerTransactions(isUser: auth.isUser);
     }
   }

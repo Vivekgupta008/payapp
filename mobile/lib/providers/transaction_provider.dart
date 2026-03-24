@@ -88,17 +88,18 @@ class TransactionProvider extends ChangeNotifier {
       final response = await _api.get(endpoint);
       final txList = response['recent_transactions'] as List? ?? [];
       _serverTransactions = txList.map((t) {
+        final serverId= t['id']?.toString() ?? '';
         return OfflineTransaction(
-          id: t['id'],
+          id: serverId,
           tokenId: t['token_id'] ?? '',
           senderId: '',
           receiverName: t['counterparty_name'],
           amount: (t['amount'] ?? 0).toDouble(),
-          nonce: t['token_id'] ?? '',
+          nonce: 'server_$serverId',
           signature: '',
           status: t['status'] ?? 'settled',
           createdAt: t['created_at'] ?? DateTime.now().toIso8601String(),
-          settledAt: t['settled_at'],
+          settledAt: t['settled_at']?.toString(),
         );
       }).toList();
       notifyListeners();
