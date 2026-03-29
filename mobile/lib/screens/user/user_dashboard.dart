@@ -5,6 +5,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/wallet_provider.dart';
 import '../../providers/transaction_provider.dart';
 import '../../widgets/balance_card.dart';
+import '../../widgets/offline_badge.dart';
 import '../../widgets/transaction_tile.dart';
 import '../../widgets/sync_indicator.dart';
 import '../../config/theme.dart';
@@ -61,6 +62,7 @@ class UserDashboard extends StatelessWidget {
         onRefresh: () async {
           await wallet.requestTokens();
           await auth.refreshUser();
+          await txProvider.loadLocalTransactions(userId: user?.id);
         },
         child: ListView(
           padding: const EdgeInsets.all(16),
@@ -75,6 +77,10 @@ class UserDashboard extends StatelessWidget {
                   ? () => wallet.requestTokens()
                   : null,
             ),
+            const SizedBox(height: 12),
+
+            // Blob-based offline credit limit badge (spec requirement)
+            OfflineLimitCard(isOnline: wallet.isOnline),
             const SizedBox(height: 16),
 
             // Sync indicator

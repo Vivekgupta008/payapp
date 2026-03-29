@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
 import '../models/transaction.dart';
+import '../models/payment_blob.dart';
 import '../services/offline_storage.dart';
+import '../services/offline_queue_service.dart';
 import '../services/sync_service.dart';
 import '../services/api_service.dart';
 
 class TransactionProvider extends ChangeNotifier {
   final OfflineStorage _storage = OfflineStorage();
+  final OfflineQueueService _blobQueue = OfflineQueueService();
   final SyncService _syncService = SyncService();
   final ApiService _api = ApiService();
 
   List<OfflineTransaction> _transactions = [];
   List<OfflineTransaction> _serverTransactions = [];
+  List<OfflineTransaction> _blobTransactions = [];
   int _pendingCount = 0;
   double _pendingAmount = 0;
   bool _isSyncing = false;
@@ -19,10 +23,10 @@ class TransactionProvider extends ChangeNotifier {
   List<OfflineTransaction> get transactions => _transactions;
   List<OfflineTransaction> get serverTransactions => _serverTransactions;
   List<OfflineTransaction> get allTransactions {
-    // Merge local and server transactions, dedup by nonce
+    // Merge token-based local, blob-based local, and server transactions, dedup by nonce.
     final seen = <String>{};
     final merged = <OfflineTransaction>[];
-    for (final tx in _transactions) {
+    for (final tx in [..._transactions, ..._blobTransactions]) {
       if (seen.add(tx.nonce)) merged.add(tx);
     }
     for (final tx in _serverTransactions) {
@@ -37,16 +41,51 @@ class TransactionProvider extends ChangeNotifier {
   bool get isSyncing => _isSyncing;
   String? get lastSyncError => _lastSyncError;
 
-  /// Load transactions from local storage
+  /// Load transactions from local storage (token-based + blob-based)
   Future<void> loadLocalTransactions({String? userId}) async {
     if (userId != null) {
       _transactions = await _storage.getTransactionsForUser(userId);
+      // Also load PaymentBlob payments for this user (Case 1/2/3 flow)
+      final blobs = await _blobQueue.getBlobsForSender(userId);
+      _blobTransactions = blobs.map(_blobToTransaction).toList();
     } else {
       _transactions = await _storage.getAllTransactions();
+      _blobTransactions = [];
     }
-    _pendingCount = await _storage.getPendingCount();
-    _pendingAmount = await _storage.getTotalPending();
+    _pendingCount = await _storage.getPendingCount() +
+        await _blobQueue.getPendingCount();
+    _pendingAmount = await _storage.getTotalPending() +
+        await _blobQueue.getPendingTotal();
     notifyListeners();
+  }
+
+  /// Convert a PaymentBlob to an OfflineTransaction for display in the history UI.
+  OfflineTransaction _blobToTransaction(PaymentBlob blob) {
+    return OfflineTransaction(
+      id: blob.id,
+      tokenId: blob.nonce,
+      senderId: blob.senderId,
+      receiverId: blob.receiverId,
+      receiverName: blob.receiverId.length > 8
+          ? blob.receiverId.substring(0, 8)
+          : blob.receiverId,
+      amount: blob.amount,
+      nonce: blob.nonce,
+      signature: blob.deviceSignature,
+      status: _mapBlobStatus(blob.status),
+      createdAt: blob.timestamp.toIso8601String(),
+    );
+  }
+
+  String _mapBlobStatus(String blobStatus) {
+    switch (blobStatus) {
+      case BlobStatus.synced:
+        return 'settled';
+      case BlobStatus.rejected:
+        return 'failed';
+      default:
+        return 'pending_offline';
+    }
   }
 
   /// Store a new offline transaction

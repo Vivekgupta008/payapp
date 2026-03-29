@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/wallet_provider.dart';
 import '../providers/transaction_provider.dart';
+import '../services/sync_engine.dart';
 import 'user/user_dashboard.dart';
 import 'user/pay_screen.dart';
 import 'user/wallet_screen.dart';
@@ -44,8 +45,9 @@ class HomeScreenState extends State<HomeScreen> {
     // Load local transactions
     await txProvider.loadLocalTransactions(userId: auth.user?.id);
 
-    // Start background sync
+    // Start background sync (existing token-based + new blob-based)
     txProvider.startSync();
+    SyncEngine().start();
 
     // If online, request fresh tokens
     if (wallet.isOnline) {

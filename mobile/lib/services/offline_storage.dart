@@ -41,6 +41,7 @@ class OfflineStorage {
       path,
       version: AppConstants.dbVersion,
       onCreate: _createTables,
+      onUpgrade: _onUpgrade,
     );
   }
 
@@ -76,6 +77,42 @@ class OfflineStorage {
         settled_at TEXT
       )
     ''');
+
+    // Payment blobs table (v2) — offline payment captures pending sync
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS payment_blobs (
+        id TEXT PRIMARY KEY,
+        sender_id TEXT NOT NULL,
+        receiver_id TEXT NOT NULL,
+        amount REAL NOT NULL,
+        timestamp TEXT NOT NULL,
+        nonce TEXT NOT NULL UNIQUE,
+        device_signature TEXT NOT NULL,
+        status TEXT DEFAULT 'pending_sync',
+        is_offline INTEGER DEFAULT 1,
+        offline_limit_at_time REAL NOT NULL DEFAULT 0
+      )
+    ''');
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // v1 → v2: add payment_blobs table
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS payment_blobs (
+          id TEXT PRIMARY KEY,
+          sender_id TEXT NOT NULL,
+          receiver_id TEXT NOT NULL,
+          amount REAL NOT NULL,
+          timestamp TEXT NOT NULL,
+          nonce TEXT NOT NULL UNIQUE,
+          device_signature TEXT NOT NULL,
+          status TEXT DEFAULT 'pending_sync',
+          is_offline INTEGER DEFAULT 1,
+          offline_limit_at_time REAL NOT NULL DEFAULT 0
+        )
+      ''');
+    }
   }
 
   // ─── Token Operations ──────────────────────────────────────

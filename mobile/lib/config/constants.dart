@@ -9,7 +9,7 @@ class AppConstants {
     if (defaultTargetPlatform == TargetPlatform.android) {
       return 'http://10.0.2.2:8000';
     }
-    return 'http://127.0.0.1:8000';
+    return 'http://192.168.1.172:8000';
   }
 
   // Storage keys
@@ -20,7 +20,7 @@ class AppConstants {
 
   // Database
   static const String dbName = 'offline_pay.db';
-  static const int dbVersion = 1;
+  static const int dbVersion = 2;
 
   // Token settings
   static const int maxOfflineTokens = 10;

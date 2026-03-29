@@ -1,10 +1,14 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:intl/intl.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/transaction_provider.dart';
 import '../../services/qr_transfer.dart';
+import '../../services/ble_service.dart';
+import '../../models/payment_blob.dart';
 import '../../config/theme.dart';
 
 class AcceptPaymentScreen extends StatefulWidget {
@@ -14,12 +18,29 @@ class AcceptPaymentScreen extends StatefulWidget {
   State<AcceptPaymentScreen> createState() => _AcceptPaymentScreenState();
 }
 
-class _AcceptPaymentScreenState extends State<AcceptPaymentScreen> {
+class _AcceptPaymentScreenState extends State<AcceptPaymentScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+
+  // Scan tab state
   MobileScannerController? _scannerCtrl;
   bool _isScanning = false;
   PaymentValidation? _validation;
   Map<String, dynamic>? _paymentData;
   bool _paymentAccepted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _scannerCtrl?.dispose();
+    super.dispose();
+  }
 
   void _startScanning() {
     _scannerCtrl = MobileScannerController(
@@ -103,22 +124,28 @@ class _AcceptPaymentScreenState extends State<AcceptPaymentScreen> {
   }
 
   @override
-  void dispose() {
-    _scannerCtrl?.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final formatter = NumberFormat.currency(symbol: '₹', decimalDigits: 2);
+    final auth = context.watch<AuthProvider>();
 
     return Scaffold(
       backgroundColor: AppTheme.surfaceColor,
       appBar: AppBar(
         title: const Text('Accept Payment'),
         automaticallyImplyLeading: false,
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(icon: Icon(Icons.qr_code_scanner), text: 'Scan'),
+            Tab(icon: Icon(Icons.qr_code), text: 'My QR'),
+          ],
+        ),
       ),
-      body: SingleChildScrollView(
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          // ── Tab 1: Scan customer QR ──────────────────────────
+          SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -419,6 +446,253 @@ class _AcceptPaymentScreenState extends State<AcceptPaymentScreen> {
             ],
           ],
         ),
+      ),
+
+          // ── Tab 2: My Receive QR ─────────────────────────────
+          _MyReceiveQR(
+            userId: auth.user?.id ?? '',
+            userName: auth.user?.fullName ?? 'Merchant',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Displays the merchant's receive QR.
+/// When shown, it starts BLE advertising so nearby offline senders (Case 3)
+/// can discover this device and push a PaymentBlob over BLE.
+class _MyReceiveQR extends StatefulWidget {
+  final String userId;
+  final String userName;
+
+  const _MyReceiveQR({required this.userId, required this.userName});
+
+  @override
+  State<_MyReceiveQR> createState() => _MyReceiveQRState();
+}
+
+class _MyReceiveQRState extends State<_MyReceiveQR> {
+  final _ble = BLEService();
+  String? _bleSessionUuid;
+  bool _bleStarting = false;
+  bool _bleError = false;
+  PaymentBlob? _lastReceivedBlob;
+  StreamSubscription? _blobSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _startBLEAdvertising();
+    _blobSub = _ble.onBlobReceived.listen(_onBlobReceived);
+  }
+
+  @override
+  void dispose() {
+    _blobSub?.cancel();
+    _ble.stopReceiving();
+    super.dispose();
+  }
+
+  Future<void> _startBLEAdvertising() async {
+    setState(() { _bleStarting = true; _bleError = false; });
+    try {
+      final uuid = await _ble.startReceiving();
+      if (mounted) setState(() { _bleSessionUuid = uuid; _bleStarting = false; });
+    } catch (_) {
+      if (mounted) setState(() { _bleStarting = false; _bleError = true; });
+    }
+  }
+
+  void _onBlobReceived(dynamic blob) {
+    if (blob is PaymentBlob && mounted) {
+      setState(() => _lastReceivedBlob = blob);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'BLE payment received: ₹${blob.amount.toStringAsFixed(2)}',
+          ),
+          backgroundColor: AppTheme.successColor,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Generate QR with BLE session UUID if available (Case 3 support)
+    final qrData = QrTransferService.generateReceiveQR(
+      receiverId: widget.userId,
+      receiverName: widget.userName,
+      bleUuid: _bleSessionUuid,
+    );
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const SizedBox(height: 16),
+          const Text(
+            'Your Receive QR',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Show this to customers so they can pay you\nonline or offline.',
+            style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+
+          // BLE status indicator
+          if (_bleStarting)
+            const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 14, height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 8),
+                Text('Starting Bluetooth...', style: TextStyle(fontSize: 12)),
+              ],
+            )
+          else if (_bleError)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.bluetooth_disabled, size: 16, color: Colors.grey),
+                const SizedBox(width: 6),
+                Text(
+                  'BLE unavailable — online/offline QR only',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+              ],
+            )
+          else
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.bluetooth_connected, size: 16,
+                    color: AppTheme.successColor),
+                const SizedBox(width: 6),
+                const Text(
+                  'Bluetooth active — ready for offline payments',
+                  style: TextStyle(fontSize: 12, color: AppTheme.successColor),
+                ),
+              ],
+            ),
+
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 20,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                QrImageView(
+                  data: qrData,
+                  version: QrVersions.auto,
+                  size: 240,
+                  backgroundColor: Colors.white,
+                  eyeStyle: const QrEyeStyle(
+                    eyeShape: QrEyeShape.circle,
+                    color: AppTheme.primaryColor,
+                  ),
+                  dataModuleStyle: const QrDataModuleStyle(
+                    dataModuleShape: QrDataModuleShape.circle,
+                    color: AppTheme.primaryColor,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  widget.userName,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'ID: ${widget.userId.length > 8 ? widget.userId.substring(0, 8) : widget.userId}...',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade500,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Last BLE received payment
+          if (_lastReceivedBlob != null) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.successColor.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                    color: AppTheme.successColor.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.bluetooth, color: AppTheme.successColor,
+                      size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Last BLE payment: ₹${_lastReceivedBlob!.amount.toStringAsFixed(2)} '
+                      '— will settle when online',
+                      style: const TextStyle(
+                          fontSize: 12, color: AppTheme.successColor),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryColor.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                  color: AppTheme.primaryColor.withOpacity(0.2)),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.info_outline,
+                    color: AppTheme.primaryColor, size: 18),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Customers can scan this QR even when offline. '
+                    'Payments settle automatically when they reconnect.',
+                    style: TextStyle(
+                        fontSize: 12, color: AppTheme.primaryColor),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

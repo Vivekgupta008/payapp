@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'package:connectivity_plus/connectivity_plus.dart';
 import '../models/transaction.dart';
 import 'api_service.dart';
 import 'offline_storage.dart';
+import 'connectivity_service.dart';
 
 class SyncService {
   static final SyncService _instance = SyncService._internal();
@@ -11,7 +11,7 @@ class SyncService {
 
   final ApiService _api = ApiService();
   final OfflineStorage _storage = OfflineStorage();
-  final Connectivity _connectivity = Connectivity();
+  final ConnectivityService _connectivity = ConnectivityService();
 
   StreamSubscription? _connectivitySub;
   Timer? _syncTimer;
@@ -24,11 +24,11 @@ class SyncService {
 
   /// Start monitoring connectivity and sync when online
   void startMonitoring() {
+    _connectivity.startListening();
     _connectivitySub?.cancel();
-    _connectivitySub = _connectivity.onConnectivityChanged.listen(
-      (results) {
-  final hasConnection = results.any((r)=> r != ConnectivityResult.none);
-        if (hasConnection) {
+    _connectivitySub = _connectivity.statusStream.listen(
+      (isOnline) {
+        if (isOnline) {
           syncPendingTransactions();
         }
       },
@@ -48,12 +48,12 @@ class SyncService {
     _syncTimer?.cancel();
     _connectivitySub = null;
     _syncTimer = null;
+    _connectivity.stopListening();
   }
 
   /// Check if device is currently online
   Future<bool> isOnline() async {
-    final results = await _connectivity.checkConnectivity();
-    return results.any((r)=> r != ConnectivityResult.none);
+    return await _connectivity.checkNow();
   }
 
   /// Sync all pending offline transactions to the backend

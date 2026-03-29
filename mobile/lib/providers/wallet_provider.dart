@@ -1,11 +1,16 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/payment_token.dart';
 import '../services/token_service.dart';
 import '../services/sync_service.dart';
+import '../services/offline_limit_service.dart';
+import '../services/connectivity_service.dart';
 
 class WalletProvider extends ChangeNotifier {
   final TokenService _tokenService = TokenService();
   final SyncService _syncService = SyncService();
+  final OfflineLimitService _limitService = OfflineLimitService();
+  final ConnectivityService _connectivityService = ConnectivityService();
 
   List<PaymentToken> _tokens = [];
   double _offlineLimit = 0;
@@ -15,6 +20,7 @@ class WalletProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _isOnline = true;
   String? _error;
+  StreamSubscription<bool>? _connectivitySub;
 
   List<PaymentToken> get tokens => _tokens;
   List<PaymentToken> get activeTokens =>
@@ -42,6 +48,10 @@ class WalletProvider extends ChangeNotifier {
       _offlineLimitRemaining = result['offline_limit_remaining'] as double;
       _riskScore = result['risk_score'] as double;
       _riskFactors = result['risk_factors'] as Map<String, dynamic>;
+
+      // Persist limit to SharedPrefs so it's available offline for 24h
+      await _limitService.updateLimitFromSync(_offlineLimit);
+
       _isLoading = false;
       notifyListeners();
       return true;
@@ -58,6 +68,11 @@ class WalletProvider extends ChangeNotifier {
     try {
       _tokens = await _tokenService.getActiveTokens();
       _isOnline = await _syncService.isOnline();
+
+      // Load persisted limit from SharedPrefs (works offline, expires after 24h)
+      _offlineLimitRemaining = await _limitService.getAvailableLimit();
+      _offlineLimit = await _limitService.getTotalLimit();
+
       notifyListeners();
     } catch (e) {
       print('Error loading cached tokens: $e');
@@ -81,10 +96,26 @@ class WalletProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Check connectivity status
+  /// Check connectivity status and subscribe to ongoing changes.
+  /// Calling this multiple times is safe — the previous subscription is cancelled.
   Future<void> checkConnectivity() async {
-    _isOnline = await _syncService.isOnline();
+    _connectivityService.startListening();
+    _isOnline = await _connectivityService.checkNow();
     notifyListeners();
+
+    _connectivitySub?.cancel();
+    _connectivitySub = _connectivityService.statusStream.listen((isOnline) {
+      if (isOnline != _isOnline) {
+        _isOnline = isOnline;
+        notifyListeners();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _connectivitySub?.cancel();
+    super.dispose();
   }
 
   void clearError() {

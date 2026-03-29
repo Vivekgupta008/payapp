@@ -11,6 +11,8 @@ from ..auth import get_current_user
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 
+_OFFLINE_LIMIT_TTL_HOURS = 24
+
 
 def _user_response(user: User) -> UserResponse:
     return UserResponse(
