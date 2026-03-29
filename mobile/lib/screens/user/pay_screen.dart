@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/wallet_provider.dart';
@@ -70,6 +72,46 @@ class _PayScreenState extends State<PayScreen> {
     _scannerCtrl?.dispose();
     _scannerCtrl = null;
     setState(() => _isScanning = false);
+  }
+
+  Future<void> _scanFromGallery() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.gallery);
+    if (picked == null) return;
+
+    final ctrl = MobileScannerController();
+    BarcodeCapture? capture;
+
+    // analyzeImage delivers results via the barcodes stream
+    final completer = Completer<BarcodeCapture?>();
+    final sub = ctrl.barcodes.listen((c) {
+      if (!completer.isCompleted) completer.complete(c);
+    });
+
+    final found = await ctrl.analyzeImage(picked.path);
+    if (found) {
+      capture = await completer.future
+          .timeout(const Duration(seconds: 2), onTimeout: () => null);
+    }
+    await sub.cancel();
+    ctrl.dispose();
+
+    if (!found || capture == null) {
+      setState(() => _error = 'No QR code found in that image.');
+      return;
+    }
+
+    final raw = capture.barcodes.firstOrNull?.rawValue;
+    if (raw == null) {
+      setState(() => _error = 'Could not read QR code.');
+      return;
+    }
+
+    final receiver = QrTransferService.parseReceiveQR(raw);
+    setState(() {
+      _scannedReceiver = receiver;
+      _error = receiver == null ? 'Invalid QR code.' : null;
+    });
   }
 
   void _onQRDetected(BarcodeCapture capture) {
@@ -184,6 +226,11 @@ class _PayScreenState extends State<PayScreen> {
 
     await _queueService.enqueue(blob);
     await _limitService.deductFromLimit(amount);
+
+    // Apply local risk penalty: each pending unsynced payment reduces the
+    // effective limit so users can't exploit offline mode by chaining payments.
+    final pendingBlobs = await _queueService.getPendingBlobs();
+    await _limitService.applyLocalRiskPenalty(pendingBlobs.length);
 
     // Case 3: if receiver embedded a BLE UUID in their QR, attempt BLE transfer.
     // The blob is already in the sender's queue regardless of BLE outcome,
@@ -572,17 +619,36 @@ class _PayScreenState extends State<PayScreen> {
                 child: const Text('Cancel'),
               ),
             ] else ...[
-              SizedBox(
-                height: 52,
-                child: OutlinedButton.icon(
-                  onPressed: _isProcessing ? null : _startScan,
-                  icon: const Icon(Icons.qr_code_scanner),
-                  label: const Text('Scan & Pay'),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: AppTheme.primaryColor),
-                    foregroundColor: AppTheme.primaryColor,
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 52,
+                      child: OutlinedButton.icon(
+                        onPressed: _isProcessing ? null : _startScan,
+                        icon: const Icon(Icons.qr_code_scanner),
+                        label: const Text('Scan & Pay'),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: AppTheme.primaryColor),
+                          foregroundColor: AppTheme.primaryColor,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    height: 52,
+                    child: OutlinedButton.icon(
+                      onPressed: _isProcessing ? null : _scanFromGallery,
+                      icon: const Icon(Icons.photo_library),
+                      label: const Text('Gallery'),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: AppTheme.primaryColor),
+                        foregroundColor: AppTheme.primaryColor,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
 

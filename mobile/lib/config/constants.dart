@@ -1,15 +1,15 @@
 import 'package:flutter/foundation.dart';
 
 class AppConstants {
-  // Backend API URL - change this to your server address
+  // Backend API URL
+  // Override at build time:  flutter run --dart-define=API_URL=https://your-app.onrender.com
+  static const String _envUrl = String.fromEnvironment('API_URL', defaultValue: '');
+
   static String get baseUrl {
-    if (kIsWeb) {
-      return 'http://127.0.0.1:8000';
-    }
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      return 'http://10.0.2.2:8000';
-    }
-    return 'http://192.168.1.172:8000';
+    if (_envUrl.isNotEmpty) return _envUrl;
+    if (kIsWeb) return 'http://127.0.0.1:8000';
+    if (defaultTargetPlatform == TargetPlatform.android) return 'http://10.0.2.2:8000';
+    return 'http://192.168.1.3:8000'; // local Mac IP for iOS dev
   }
 
   // Storage keys

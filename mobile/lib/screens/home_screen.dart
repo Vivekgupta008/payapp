@@ -80,52 +80,64 @@ class HomeScreenState extends State<HomeScreen> {
       body: isUser
           ? userPages[_currentIndex.clamp(0, userPages.length - 1)]
           : merchantPages[_currentIndex.clamp(0, merchantPages.length - 1)],
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (i) => setState(() => _currentIndex = i),
-        backgroundColor: Colors.white,
-        elevation: 8,
-        indicatorColor: AppTheme.primaryColor.withOpacity(0.1),
-        destinations: isUser
-            ? const [
-                NavigationDestination(
-                  icon: Icon(Icons.dashboard_outlined),
-                  selectedIcon: Icon(Icons.dashboard, color: AppTheme.primaryColor),
-                  label: 'Home',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.send_outlined),
-                  selectedIcon: Icon(Icons.send, color: AppTheme.primaryColor),
-                  label: 'Pay',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.account_balance_wallet_outlined),
-                  selectedIcon: Icon(Icons.account_balance_wallet, color: AppTheme.primaryColor),
-                  label: 'Wallet',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.history_outlined),
-                  selectedIcon: Icon(Icons.history, color: AppTheme.primaryColor),
-                  label: 'History',
-                ),
-              ]
-            : const [
-                NavigationDestination(
-                  icon: Icon(Icons.dashboard_outlined),
-                  selectedIcon: Icon(Icons.dashboard, color: AppTheme.primaryColor),
-                  label: 'Dashboard',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.qr_code_scanner_outlined),
-                  selectedIcon: Icon(Icons.qr_code_scanner, color: AppTheme.primaryColor),
-                  label: 'Accept',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.receipt_long_outlined),
-                  selectedIcon: Icon(Icons.receipt_long, color: AppTheme.primaryColor),
-                  label: 'Settlement',
-                ),
-              ],
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 12,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: NavigationBar(
+          selectedIndex: _currentIndex,
+          onDestinationSelected: (i) => setState(() => _currentIndex = i),
+          backgroundColor: Colors.white,
+          elevation: 0,
+          indicatorColor: AppTheme.paytmBlue.withOpacity(0.12),
+          destinations: isUser
+              ? const [
+                  NavigationDestination(
+                    icon: Icon(Icons.home_outlined),
+                    selectedIcon: Icon(Icons.home, color: AppTheme.navyBlue),
+                    label: 'Home',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.send_outlined),
+                    selectedIcon: Icon(Icons.send, color: AppTheme.navyBlue),
+                    label: 'Pay',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.account_balance_wallet_outlined),
+                    selectedIcon: Icon(Icons.account_balance_wallet, color: AppTheme.navyBlue),
+                    label: 'Wallet',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.history_outlined),
+                    selectedIcon: Icon(Icons.history, color: AppTheme.navyBlue),
+                    label: 'Passbook',
+                  ),
+                ]
+              : const [
+                  NavigationDestination(
+                    icon: Icon(Icons.store_outlined),
+                    selectedIcon: Icon(Icons.store, color: AppTheme.navyBlue),
+                    label: 'Dashboard',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.qr_code_scanner_outlined),
+                    selectedIcon: Icon(Icons.qr_code_scanner, color: AppTheme.navyBlue),
+                    label: 'Accept',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.receipt_long_outlined),
+                    selectedIcon: Icon(Icons.receipt_long, color: AppTheme.navyBlue),
+                    label: 'Settlement',
+                  ),
+                ],
+        ),
       ),
     );
   }

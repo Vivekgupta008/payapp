@@ -26,6 +26,7 @@ dependencies:
   sqflite_common_ffi: ^2.4.0+2
   sqflite_common_ffi_web: ^1.1.1
   flutter_blue_plus: ^1.31.0
+  image_picker: ^1.0.7
 
 dev_dependencies:
   flutter_test:

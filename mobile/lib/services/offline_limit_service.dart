@@ -83,6 +83,28 @@ class OfflineLimitService {
     await _saveLimit(newLimit, expiry);
   }
 
+  /// Applies a local risk penalty to the remaining limit based on how many
+  /// offline payments are already pending (unsynced). Each pending payment
+  /// reduces the effective limit by 10%, floored at 30% of total.
+  ///
+  /// Called immediately after each offline payment so users can't exploit
+  /// the offline limit by making many payments before syncing.
+  Future<void> applyLocalRiskPenalty(int pendingBlobCount) async {
+    if (pendingBlobCount <= 0) return;
+    final prefs = await SharedPreferences.getInstance();
+    final total = prefs.getDouble(_keyLimit) ?? 0.0;
+    final remaining = prefs.getDouble(_keyRemaining) ?? 0.0;
+
+    // 10% reduction per pending payment, floored at 30% of total
+    final penaltyFactor =
+        (1.0 - pendingBlobCount * 0.1).clamp(0.3, 1.0);
+    final penalizedCap = total * penaltyFactor;
+
+    // Only reduce, never increase the remaining limit
+    final adjusted = remaining.clamp(0.0, penalizedCap);
+    await prefs.setDouble(_keyRemaining, adjusted);
+  }
+
   /// Resets remaining limit back to total (e.g. after all blobs are settled).
   Future<void> resetRemainingToTotal() async {
     final prefs = await SharedPreferences.getInstance();
