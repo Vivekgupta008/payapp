@@ -64,6 +64,35 @@ def health_check():
     return {"status": "healthy"}
 
 
+@app.post("/api/admin/seed")
+def seed_demo_data(db: Session = Depends(get_db)):
+    """One-time seed endpoint — creates demo accounts if none exist."""
+    from .models import User, UserRole, generate_uuid
+    from .auth import hash_password
+
+    if db.query(User).first():
+        return {"status": "already_seeded"}
+
+    demo_users = [
+        User(id=generate_uuid(), email="alice@demo.com",
+             password_hash=hash_password("password123"),
+             full_name="Alice Kumar", role=UserRole.USER,
+             kyc_tier=2, balance=10000.0, device_trust_score=0.85),
+        User(id=generate_uuid(), email="bob@demo.com",
+             password_hash=hash_password("password123"),
+             full_name="Bob Singh", role=UserRole.USER,
+             kyc_tier=1, balance=5000.0, device_trust_score=0.70),
+        User(id=generate_uuid(), email="shopkeeper@demo.com",
+             password_hash=hash_password("password123"),
+             full_name="Raj Shopkeeper", role=UserRole.MERCHANT,
+             kyc_tier=3, balance=50000.0, device_trust_score=0.95),
+    ]
+    for u in demo_users:
+        db.add(u)
+    db.commit()
+    return {"status": "seeded", "accounts": [u.email for u in demo_users]}
+
+
 @app.get("/api/public-key")
 def get_public_key():
     """Get the Ed25519 public key for offline token verification."""
