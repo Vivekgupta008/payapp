@@ -1,0 +1,35 @@
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>body{margin:0;padding:32px;background:#0a1628;} </style></head><body>
+<div class="mermaid">
+%%{init:{'theme':'dark','themeVariables':{'primaryColor':'#002970','primaryTextColor':'#fff','primaryBorderColor':'#00B9F1','lineColor':'#00B9F1','secondaryColor':'#00B9F1','tertiaryColor':'#0a1628','fontFamily':'Arial','activationBkgColor':'#003DA5','activationBorderColor':'#00B9F1','labelBoxBkgColor':'#0d1f3c','labelBoxBorderColor':'#00B9F1','labelTextColor':'#fff','loopTextColor':'#00B9F1','noteBkgColor':'#003380','noteTextColor':'#fff'}}}%%
+sequenceDiagram
+    participant S as 📱 Sender<br/>(Offline)
+    participant Q as 🗃️ SQLite<br/>Queue
+    participant NET as 🌐 Internet
+    participant B as ☁️ Backend
+    participant R as 📱 Receiver<br/>(Online)
+
+    S->>S: Scan Receiver QR code
+    S->>S: Enter ₹ Amount
+    S->>S: connectivity_plus → OFFLINE
+    S->>S: Check OfflineLimitService
+    Note over S: Limit ₹1,500 → ₹800 available
+    S->>Q: Create & store PaymentBlob
+    Note over Q: status: pending_sync
+    S->>S: Deduct ₹ from local limit
+    S->>NET: HTTP notify attempt (fails — offline)
+    S-->>S: Show "Paid offline ✓"
+
+    Note over S,R: ── Connectivity restored ──
+
+    Q->>B: POST /offline/sync [blob array]
+    B->>B: Verify Ed25519 signature
+    B->>B: Check nonce replay (Redis)
+    B->>B: Debit sender bank account
+    B->>R: Credit receiver — real-time
+    B->>Q: { status: accepted }
+    Q->>Q: Mark blob synced ✓
+</div>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true});</script>
+</body></html>

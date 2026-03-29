@@ -5,12 +5,14 @@ import '../services/offline_storage.dart';
 import '../services/offline_queue_service.dart';
 import '../services/sync_service.dart';
 import '../services/api_service.dart';
+import '../services/offline_limit_service.dart';
 
 class TransactionProvider extends ChangeNotifier {
   final OfflineStorage _storage = OfflineStorage();
   final OfflineQueueService _blobQueue = OfflineQueueService();
   final SyncService _syncService = SyncService();
   final ApiService _api = ApiService();
+  final OfflineLimitService _limitService = OfflineLimitService();
 
   List<OfflineTransaction> _transactions = [];
   List<OfflineTransaction> _serverTransactions = [];
@@ -45,9 +47,14 @@ class TransactionProvider extends ChangeNotifier {
   Future<void> loadLocalTransactions({String? userId}) async {
     if (userId != null) {
       _transactions = await _storage.getTransactionsForUser(userId);
-      // Also load PaymentBlob payments for this user (Case 1/2/3 flow)
-      final blobs = await _blobQueue.getBlobsForSender(userId);
-      _blobTransactions = blobs.map(_blobToTransaction).toList();
+      // Load blobs where this user is the sender (outgoing offline payments)
+      final sentBlobs = await _blobQueue.getBlobsForSender(userId);
+      // Load blobs where this user is the receiver (BLE/offline payments received)
+      final receivedBlobs = await _blobQueue.getBlobsForReceiver(userId);
+      _blobTransactions = [
+        ...sentBlobs.map((b) => _blobToTransaction(b, isOutgoing: true)),
+        ...receivedBlobs.map((b) => _blobToTransaction(b, isOutgoing: false)),
+      ];
     } else {
       _transactions = await _storage.getAllTransactions();
       _blobTransactions = [];
@@ -60,15 +67,15 @@ class TransactionProvider extends ChangeNotifier {
   }
 
   /// Convert a PaymentBlob to an OfflineTransaction for display in the history UI.
-  OfflineTransaction _blobToTransaction(PaymentBlob blob) {
+  OfflineTransaction _blobToTransaction(PaymentBlob blob, {bool isOutgoing = true}) {
+    final displayId = isOutgoing ? blob.receiverId : blob.senderId;
+    final shortId = displayId.length > 8 ? displayId.substring(0, 8) : displayId;
     return OfflineTransaction(
       id: blob.id,
       tokenId: blob.nonce,
       senderId: blob.senderId,
       receiverId: blob.receiverId,
-      receiverName: blob.receiverId.length > 8
-          ? blob.receiverId.substring(0, 8)
-          : blob.receiverId,
+      receiverName: isOutgoing ? shortId : 'From $shortId',
       amount: blob.amount,
       nonce: blob.nonce,
       signature: blob.deviceSignature,
@@ -107,10 +114,14 @@ class TransactionProvider extends ChangeNotifier {
       final result = await _syncService.syncPendingTransactions();
       // Reload local transactions to get updated statuses
       _transactions = await _storage.getAllTransactions();
-      _pendingCount = await _storage.getPendingCount();
-      _pendingAmount = await _storage.getTotalPending();
+      _pendingCount = await _storage.getPendingCount() +
+          await _blobQueue.getPendingCount();
+      _pendingAmount = await _storage.getTotalPending() +
+          await _blobQueue.getPendingTotal();
       _isSyncing = false;
       notifyListeners();
+      // Fetch recalculated offline limit from backend after sync
+      await _limitService.fetchAndCacheLimit();
       return result;
     } catch (e) {
       _lastSyncError = e.toString();
@@ -149,8 +160,9 @@ class TransactionProvider extends ChangeNotifier {
 
   /// Start background sync monitoring
   void startSync() {
-    _syncService.onSyncCompleted = (settled, failed) {
-      loadLocalTransactions();
+    _syncService.onSyncCompleted = (settled, failed) async {
+      await loadLocalTransactions();
+      await _limitService.fetchAndCacheLimit();
     };
     _syncService.startMonitoring();
   }

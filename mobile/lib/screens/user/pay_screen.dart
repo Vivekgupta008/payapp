@@ -17,6 +17,7 @@ import '../../services/connectivity_service.dart';
 import '../../services/api_service.dart';
 import '../../services/ble_service.dart';
 import '../../config/theme.dart';
+import '../payment_receipt_screen.dart';
 
 class PayScreen extends StatefulWidget {
   const PayScreen({super.key});
@@ -29,13 +30,10 @@ class _PayScreenState extends State<PayScreen> {
   final _amountCtrl = TextEditingController();
   final _scanAmountCtrl = TextEditingController();
 
-  // Token-based payment state (existing online flow)
   String? _qrData;
   bool _isProcessing = false;
   String? _error;
-  String? _successMessage;
 
-  // Scan-to-pay state (Case 1/2/3 — blob flow)
   MobileScannerController? _scannerCtrl;
   bool _isScanning = false;
   bool _isBLETransferring = false;
@@ -54,7 +52,7 @@ class _PayScreenState extends State<PayScreen> {
     super.dispose();
   }
 
-  // ── Scan-to-pay helpers ──────────────────────────────────────
+  // ── Scan helpers ─────────────────────────────────────────────
 
   void _startScan() {
     _scannerCtrl = MobileScannerController(
@@ -80,15 +78,13 @@ class _PayScreenState extends State<PayScreen> {
     if (picked == null) return;
 
     final ctrl = MobileScannerController();
-    BarcodeCapture? capture;
-
-    // analyzeImage delivers results via the barcodes stream
     final completer = Completer<BarcodeCapture?>();
     final sub = ctrl.barcodes.listen((c) {
       if (!completer.isCompleted) completer.complete(c);
     });
 
     final found = await ctrl.analyzeImage(picked.path);
+    BarcodeCapture? capture;
     if (found) {
       capture = await completer.future
           .timeout(const Duration(seconds: 2), onTimeout: () => null);
@@ -110,8 +106,9 @@ class _PayScreenState extends State<PayScreen> {
     final receiver = QrTransferService.parseReceiveQR(raw);
     setState(() {
       _scannedReceiver = receiver;
-      _error = receiver == null ? 'Invalid QR code.' : null;
+      _error = receiver == null ? 'Invalid QR — ask the recipient to show their Paytm QR.' : null;
     });
+    if (receiver != null) _showAmountDialog(receiver);
   }
 
   void _onQRDetected(BarcodeCapture capture) {
@@ -121,7 +118,7 @@ class _PayScreenState extends State<PayScreen> {
 
     final receiver = QrTransferService.parseReceiveQR(raw);
     if (receiver == null) {
-      setState(() => _error = 'Not a valid receive QR code. Ask the merchant for their QR.');
+      setState(() => _error = 'Invalid QR — ask the recipient to show their Paytm QR.');
       return;
     }
     setState(() => _scannedReceiver = receiver);
@@ -130,56 +127,210 @@ class _PayScreenState extends State<PayScreen> {
 
   Future<void> _showAmountDialog(ReceiverQRData receiver) async {
     _scanAmountCtrl.clear();
+    final wallet = context.read<WalletProvider>();
+    final isOnline = wallet.isOnline;
+    final limit = await _limitService.getAvailableLimit();
+
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Padding(
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
         padding: EdgeInsets.only(
-          left: 24, right: 24, top: 24,
-          bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          left: 24,
+          right: 24,
+          top: 24,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 32,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'Pay ${receiver.receiverName}',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            // Handle
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
+
+            // Recipient
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 22,
+                  backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+                  child: Text(
+                    receiver.receiverName.isNotEmpty
+                        ? receiver.receiverName[0].toUpperCase()
+                        : '?',
+                    style: const TextStyle(
+                      color: AppTheme.primaryColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Paying to',
+                        style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    Text(
+                      receiver.receiverName,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.primaryColor,
+                      ),
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isOnline
+                        ? AppTheme.successColor.withOpacity(0.1)
+                        : AppTheme.offlineColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isOnline ? Icons.wifi : Icons.wifi_off,
+                        size: 12,
+                        color: isOnline ? AppTheme.successColor : AppTheme.offlineColor,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        isOnline ? 'Online' : '₹${limit.toStringAsFixed(0)} limit',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isOnline ? AppTheme.successColor : AppTheme.offlineColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            // Amount input
             TextFormField(
               controller: _scanAmountCtrl,
               autofocus: true,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-              decoration: const InputDecoration(
+              style: const TextStyle(
+                fontSize: 36,
+                fontWeight: FontWeight.w800,
+                color: AppTheme.primaryColor,
+              ),
+              decoration: InputDecoration(
                 prefixText: '₹ ',
-                prefixStyle: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-                hintText: '0.00',
+                prefixStyle: const TextStyle(
+                  fontSize: 36,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.primaryColor,
+                ),
+                hintText: '0',
+                hintStyle: TextStyle(
+                  fontSize: 36,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.grey.shade300,
+                ),
                 filled: true,
-                fillColor: Colors.white,
+                fillColor: AppTheme.lightBlue,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(color: AppTheme.primaryColor, width: 2),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
               ),
             ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _processOfflinePayment(receiver);
-              },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-              child: const Text('Confirm Payment', style: TextStyle(fontSize: 16)),
+
+            // Quick amounts
+            const SizedBox(height: 12),
+            Row(
+              children: [100, 200, 500, 1000].map((v) {
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: GestureDetector(
+                    onTap: () => _scanAmountCtrl.text = v.toString(),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppTheme.lightBlue,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                            color: AppTheme.primaryColor.withOpacity(0.2)),
+                      ),
+                      child: Text(
+                        '₹$v',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.primaryColor,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 24),
+
+            SizedBox(
+              height: 54,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _processOfflinePayment(receiver);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryColor,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: const Text(
+                  'Pay Now',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
+
+  // ── Payment logic ────────────────────────────────────────────
 
   Future<void> _processOfflinePayment(ReceiverQRData receiver) async {
     final amountStr = _scanAmountCtrl.text.trim();
@@ -190,27 +341,26 @@ class _PayScreenState extends State<PayScreen> {
       return;
     }
 
-    setState(() { _isProcessing = true; _error = null; _successMessage = null; });
+    setState(() {
+      _isProcessing = true;
+      _error = null;
+    });
 
     final auth = context.read<AuthProvider>();
     final senderId = auth.user?.id ?? '';
-
-    // Check connectivity — route to online or offline path
     final isOnline = await _connectivityService.checkNow();
 
     if (isOnline) {
-      // Case 2: sender online → normal API payment (backend handles offline receiver)
       await _processOnlinePayment(senderId, receiver, amount);
       return;
     }
 
-    // Case 1: sender offline → PaymentBlob path
+    // Offline path
     final availableLimit = await _limitService.getAvailableLimit();
     if (amount > availableLimit) {
       setState(() {
-        _error = 'Offline limit insufficient.\n'
-            'Available: ₹${availableLimit.toStringAsFixed(2)}  |  '
-            'Requested: ₹${amount.toStringAsFixed(2)}';
+        _error =
+            'Offline limit insufficient.\nAvailable: ₹${availableLimit.toStringAsFixed(2)}  ·  Requested: ₹${amount.toStringAsFixed(2)}';
         _isProcessing = false;
       });
       return;
@@ -227,46 +377,39 @@ class _PayScreenState extends State<PayScreen> {
     await _queueService.enqueue(blob);
     await _limitService.deductFromLimit(amount);
 
-    // Apply local risk penalty: each pending unsynced payment reduces the
-    // effective limit so users can't exploit offline mode by chaining payments.
     final pendingBlobs = await _queueService.getPendingBlobs();
     await _limitService.applyLocalRiskPenalty(pendingBlobs.length);
 
-    // Case 3: if receiver embedded a BLE UUID in their QR, attempt BLE transfer.
-    // The blob is already in the sender's queue regardless of BLE outcome,
-    // so it will be submitted to the backend when the sender comes online.
+    // Refresh WalletProvider so displayed limit updates immediately
+    if (mounted) await context.read<WalletProvider>().loadCachedTokens();
+
     bool? bleSuccess;
     if (receiver.bleUuid != null) {
-      setState(() { _isProcessing = true; _isBLETransferring = true; });
+      setState(() => _isBLETransferring = true);
       bleSuccess = await _bleService.sendBlobViaBLE(blob, receiver.bleUuid!);
-      setState(() { _isBLETransferring = false; });
+      setState(() => _isBLETransferring = false);
     }
 
-    String successMsg;
-    if (bleSuccess == true) {
-      successMsg = 'Payment of ₹${amount.toStringAsFixed(2)} to '
-          '${receiver.receiverName} sent via Bluetooth.';
-    } else if (bleSuccess == false) {
-      successMsg = 'Payment of ₹${amount.toStringAsFixed(2)} queued. '
-          'Bluetooth transfer failed — will sync when online.';
-    } else {
-      successMsg = 'Payment of ₹${amount.toStringAsFixed(2)} to '
-          '${receiver.receiverName} sent offline. Will sync when you reconnect.';
-    }
+    final receiptStatus =
+        bleSuccess == true ? ReceiptStatus.sentViaBluetooth : ReceiptStatus.pendingSync;
 
     setState(() {
       _isProcessing = false;
       _scannedReceiver = null;
-      _successMessage = successMsg;
     });
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('₹${amount.toStringAsFixed(2)} sent offline ✓'),
-          backgroundColor: AppTheme.successColor,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PaymentReceiptScreen(
+            amount: amount,
+            recipientName: receiver.receiverName,
+            paymentId: blob.id,
+            status: receiptStatus,
+            isOnline: false,
+            timestamp: DateTime.now(),
+          ),
         ),
       );
     }
@@ -277,9 +420,6 @@ class _PayScreenState extends State<PayScreen> {
     ReceiverQRData receiver,
     double amount,
   ) async {
-    // Case 2: POST to /api/payments/online
-    // Backend debits sender immediately; if receiver is offline, it holds
-    // the credit — receiver claims it on next sync.
     try {
       final blob = PaymentBlob(
         senderId: senderId,
@@ -300,19 +440,31 @@ class _PayScreenState extends State<PayScreen> {
         ),
       ]);
 
-      // Refresh wallet balance
-      if (mounted) {
-        await context.read<AuthProvider>().refreshUser();
-      }
+      if (mounted) await context.read<AuthProvider>().refreshUser();
 
       setState(() {
         _isProcessing = false;
-        _successMessage =
-            'Payment of ₹${amount.toStringAsFixed(2)} to ${receiver.receiverName} sent!';
+        _scannedReceiver = null;
       });
+
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PaymentReceiptScreen(
+              amount: amount,
+              recipientName: receiver.receiverName,
+              paymentId: blob.id,
+              status: ReceiptStatus.settled,
+              isOnline: true,
+              timestamp: DateTime.now(),
+            ),
+          ),
+        );
+      }
     } catch (e) {
       setState(() {
-        _error = 'Payment failed: $e';
+        _error = e.toString();
         _isProcessing = false;
       });
     }
@@ -324,18 +476,20 @@ class _PayScreenState extends State<PayScreen> {
     required double amount,
     required String nonce,
   }) async {
-    await _ApiHelper.postOnlinePayment(
-      receiverId: receiverId,
-      receiverName: receiverName,
-      amount: amount,
-      nonce: nonce,
-    );
+    final api = ApiService();
+    await api.post('/api/payments/online', {
+      'receiver_id': receiverId,
+      'receiver_name': receiverName,
+      'amount': amount,
+      'nonce': nonce,
+    });
   }
 
-  Future<void> _generatePayment() async {
+  // ── Token QR generation (legacy flow) ───────────────────────
+
+  Future<void> _generateTokenQR() async {
     setState(() {
       _error = null;
-      _successMessage = null;
       _qrData = null;
     });
 
@@ -362,18 +516,16 @@ class _PayScreenState extends State<PayScreen> {
       final wallet = context.read<WalletProvider>();
       final auth = context.read<AuthProvider>();
 
-      // Find a suitable token
       final token = await wallet.findTokenForPayment(amount);
       if (token == null) {
         setState(() {
-          _error = 'No available tokens for this amount. '
-              'Available balance: ₹${wallet.availableBalance.toStringAsFixed(2)}';
+          _error =
+              'No tokens available for ₹${amount.toStringAsFixed(0)}. Connect to internet to get tokens.';
           _isProcessing = false;
         });
         return;
       }
 
-      // Generate QR code
       final qrPayload = QrTransferService.generatePaymentQR(
         token: token,
         paymentAmount: amount,
@@ -383,31 +535,27 @@ class _PayScreenState extends State<PayScreen> {
       setState(() {
         _qrData = qrPayload;
         _isProcessing = false;
-        _successMessage = 'Show this QR to the merchant';
       });
     } catch (e) {
       setState(() {
-        _error = 'Error generating payment: $e';
+        _error = 'Error: $e';
         _isProcessing = false;
       });
     }
   }
 
-  Future<void> _confirmPayment() async {
+  Future<void> _confirmTokenPayment() async {
     if (_qrData == null) return;
 
     final wallet = context.read<WalletProvider>();
     final txProvider = context.read<TransactionProvider>();
     final auth = context.read<AuthProvider>();
 
-    // Parse the QR data to extract token info
     final paymentData = QrTransferService.parsePaymentQR(_qrData!);
     if (paymentData == null) return;
 
-    // Mark token as consumed
     await wallet.consumeToken(paymentData['token_id']);
 
-    // Record transaction locally
     final tx = OfflineTransaction(
       tokenId: paymentData['token_id'],
       senderId: auth.user?.id ?? '',
@@ -421,7 +569,6 @@ class _PayScreenState extends State<PayScreen> {
 
     setState(() {
       _qrData = null;
-      _successMessage = 'Payment of ₹${paymentData['amount']} confirmed!';
       _amountCtrl.clear();
     });
 
@@ -431,304 +578,275 @@ class _PayScreenState extends State<PayScreen> {
           content: const Text('Payment recorded (offline)'),
           backgroundColor: AppTheme.successColor,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
     }
   }
 
+  // ── Build ────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     final wallet = context.watch<WalletProvider>();
-    final formatter = NumberFormat.currency(symbol: '₹', decimalDigits: 2);
 
     return Scaffold(
       backgroundColor: AppTheme.surfaceColor,
       appBar: AppBar(
-        title: const Text('Make Payment'),
+        title: const Text('Pay'),
         automaticallyImplyLeading: false,
         actions: [
-          // Offline limit badge in app bar
-          FutureBuilder<double>(
-            future: _limitService.getAvailableLimit(),
-            builder: (ctx, snap) {
-              final limit = snap.data ?? 0.0;
-              return Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Center(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                decoration: BoxDecoration(
+                  color: wallet.isOnline
+                      ? AppTheme.successColor.withOpacity(0.1)
+                      : AppTheme.offlineColor.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      wallet.isOnline ? Icons.wifi : Icons.wifi_off,
+                      size: 13,
                       color: wallet.isOnline
-                          ? AppTheme.successColor.withOpacity(0.12)
-                          : AppTheme.offlineColor.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(20),
+                          ? AppTheme.successColor
+                          : AppTheme.offlineColor,
                     ),
-                    child: Text(
-                      wallet.isOnline
-                          ? 'Online'
-                          : 'Offline limit: ₹${limit.toStringAsFixed(0)}',
+                    const SizedBox(width: 4),
+                    Text(
+                      wallet.isOnline ? 'Online' : 'Offline',
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: wallet.isOnline
                             ? AppTheme.successColor
                             : AppTheme.offlineColor,
                       ),
                     ),
-                  ),
+                  ],
                 ),
-              );
-            },
+              ),
+            ),
           ),
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Available balance
+            // ── Offline limit card ───────────────────────────
+            _OfflineLimitCard(
+              isOnline: wallet.isOnline,
+              remaining: wallet.offlineLimitRemaining,
+              total: wallet.offlineLimit,
+            ),
+            const SizedBox(height: 16),
+
+            // ── Scan & Pay ───────────────────────────────────
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: AppTheme.secondaryColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: AppTheme.secondaryColor.withOpacity(0.3),
-                ),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.account_balance_wallet,
-                      color: AppTheme.secondaryColor),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  Row(
                     children: [
+                      const Icon(Icons.qr_code_scanner,
+                          color: AppTheme.primaryColor, size: 20),
+                      const SizedBox(width: 8),
                       const Text(
-                        'Available for Offline Payment',
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                        'Scan & Pay',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.primaryColor,
+                        ),
                       ),
-                      Text(
-                        formatter.format(wallet.availableBalance),
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.secondaryColor,
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppTheme.lightBlue,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          wallet.isOnline
+                              ? 'Instant settle'
+                              : 'Uses offline limit',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.primaryColor,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      '${wallet.activeTokens.length} tokens',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                  const SizedBox(height: 16),
+
+                  // Scanner view
+                  if (_isScanning) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: SizedBox(
+                        height: 260,
+                        child: _scannerCtrl != null
+                            ? MobileScanner(
+                                controller: _scannerCtrl!,
+                                onDetect: _onQRDetected,
+                              )
+                            : const Center(child: CircularProgressIndicator()),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Amount Input
-            const Text(
-              'Enter Amount',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _amountCtrl,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-              decoration: InputDecoration(
-                prefixText: '₹ ',
-                prefixStyle: const TextStyle(
-                    fontSize: 28, fontWeight: FontWeight.bold),
-                hintText: '0.00',
-                hintStyle: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey.shade300,
-                ),
-                filled: true,
-                fillColor: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            // Quick amounts
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [50, 100, 200, 500].map((amount) {
-                return ActionChip(
-                  label: Text('₹$amount'),
-                  onPressed: () {
-                    _amountCtrl.text = amount.toString();
-                  },
-                  backgroundColor: AppTheme.primaryColor.withOpacity(0.05),
-                  side: BorderSide(
-                      color: AppTheme.primaryColor.withOpacity(0.2)),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 20),
-
-            // ── Scan & Pay (Case 1: offline, Case 2: online) ──────
-            const SizedBox(height: 8),
-            const Divider(),
-            const SizedBox(height: 8),
-            const Text(
-              'Scan Merchant QR to Pay',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 10),
-
-            if (_isScanning) ...[
-              ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: SizedBox(
-                  height: 280,
-                  child: _scannerCtrl != null
-                      ? MobileScanner(
-                          controller: _scannerCtrl!,
-                          onDetect: _onQRDetected,
-                        )
-                      : const Center(child: CircularProgressIndicator()),
-                ),
-              ),
-              const SizedBox(height: 10),
-              OutlinedButton(
-                onPressed: _stopScan,
-                child: const Text('Cancel'),
-              ),
-            ] else ...[
-              Row(
-                children: [
-                  Expanded(
-                    child: SizedBox(
-                      height: 52,
-                      child: OutlinedButton.icon(
-                        onPressed: _isProcessing ? null : _startScan,
-                        icon: const Icon(Icons.qr_code_scanner),
-                        label: const Text('Scan & Pay'),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: AppTheme.primaryColor),
-                          foregroundColor: AppTheme.primaryColor,
+                    const SizedBox(height: 12),
+                    OutlinedButton(
+                      onPressed: _stopScan,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.primaryColor,
+                        side: const BorderSide(color: AppTheme.primaryColor),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
                         ),
                       ),
+                      child: const Text('Cancel Scan'),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  SizedBox(
-                    height: 52,
-                    child: OutlinedButton.icon(
-                      onPressed: _isProcessing ? null : _scanFromGallery,
-                      icon: const Icon(Icons.photo_library),
-                      label: const Text('Gallery'),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: AppTheme.primaryColor),
-                        foregroundColor: AppTheme.primaryColor,
+                  ] else ...[
+                    // Scanned receiver chip
+                    if (_scannedReceiver != null) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: AppTheme.lightBlue,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.check_circle,
+                                color: AppTheme.successColor, size: 16),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Paying: ${_scannedReceiver!.receiverName}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.primaryColor,
+                                fontSize: 13,
+                              ),
+                            ),
+                            const Spacer(),
+                            GestureDetector(
+                              onTap: () =>
+                                  setState(() => _scannedReceiver = null),
+                              child: const Icon(Icons.close,
+                                  size: 16, color: Colors.grey),
+                            ),
+                          ],
+                        ),
                       ),
+                      const SizedBox(height: 12),
+                    ],
+
+                    // BLE progress
+                    if (_isBLETransferring) ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryColor.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                              color: AppTheme.primaryColor.withOpacity(0.2)),
+                        ),
+                        child: const Row(
+                          children: [
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppTheme.primaryColor),
+                            ),
+                            SizedBox(width: 10),
+                            Text(
+                              'Connecting via Bluetooth…',
+                              style: TextStyle(
+                                  fontSize: 13, color: AppTheme.primaryColor),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ] else if (_isProcessing) ...[
+                      const Center(
+                          child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: CircularProgressIndicator(),
+                      )),
+                    ],
+
+                    // Scan buttons
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: SizedBox(
+                            height: 48,
+                            child: ElevatedButton.icon(
+                              onPressed: _isProcessing ? null : _startScan,
+                              icon: const Icon(Icons.qr_code_scanner, size: 18),
+                              label: const Text('Scan QR to Pay'),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        SizedBox(
+                          height: 48,
+                          child: OutlinedButton(
+                            onPressed: _isProcessing ? null : _scanFromGallery,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppTheme.primaryColor,
+                              side: const BorderSide(
+                                  color: AppTheme.primaryColor),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                              padding: const EdgeInsets.symmetric(horizontal: 14),
+                            ),
+                            child: const Icon(Icons.photo_library, size: 18),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
+                  ],
                 ],
               ),
-            ],
-
-            if (_scannedReceiver != null && !_isScanning) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryColor.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppTheme.primaryColor.withOpacity(0.2)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.person, color: AppTheme.primaryColor, size: 18),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Paying: ${_scannedReceiver!.receiverName}',
-                      style: const TextStyle(
-                        color: AppTheme.primaryColor,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-
-            if (_isBLETransferring) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.blue.withOpacity(0.2)),
-                ),
-                child: const Row(
-                  children: [
-                    SizedBox(
-                      width: 18, height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Connecting via Bluetooth to send payment...',
-                        style: TextStyle(fontSize: 13, color: Colors.blue),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ] else if (_isProcessing) ...[
-              const SizedBox(height: 16),
-              const Center(child: CircularProgressIndicator()),
-            ],
-
-            const SizedBox(height: 16),
-            const Divider(),
-            const SizedBox(height: 8),
-            const Text(
-              'Generate Offline Token QR',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
-            const SizedBox(height: 8),
 
             // Error
-            if (_error != null)
+            if (_error != null) ...[
+              const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(12),
-                margin: const EdgeInsets.only(bottom: 16),
                 decoration: BoxDecoration(
-                  color: AppTheme.errorColor.withOpacity(0.1),
+                  color: AppTheme.errorColor.withOpacity(0.08),
                   borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: AppTheme.errorColor.withOpacity(0.2)),
                 ),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Icon(Icons.error_outline,
-                        color: AppTheme.errorColor, size: 20),
+                        color: AppTheme.errorColor, size: 18),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -737,138 +855,30 @@ class _PayScreenState extends State<PayScreen> {
                             color: AppTheme.errorColor, fontSize: 13),
                       ),
                     ),
-                  ],
-                ),
-              ),
-
-            // Generate QR button
-            if (_qrData == null)
-              SizedBox(
-                height: 52,
-                child: ElevatedButton.icon(
-                  onPressed: _isProcessing ? null : _generatePayment,
-                  icon: _isProcessing
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
-                      : const Icon(Icons.qr_code),
-                  label: Text(
-                    _isProcessing ? 'Processing...' : 'Generate Payment QR',
-                  ),
-                ),
-              ),
-
-            // QR Code display
-            if (_qrData != null) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
-                      blurRadius: 16,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    const Text(
-                      'Show this QR to Merchant',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Merchant will scan to accept payment',
-                      style: TextStyle(
-                          fontSize: 12, color: Colors.grey.shade500),
-                    ),
-                    const SizedBox(height: 20),
-                    Center(
-                      child: QrImageView(
-                        data: _qrData!,
-                        version: QrVersions.auto,
-                        size: 220,
-                        backgroundColor: Colors.white,
-                        eyeStyle: const QrEyeStyle(
-                          eyeShape: QrEyeShape.circle,
-                          color: AppTheme.primaryColor,
-                        ),
-                        dataModuleStyle: const QrDataModuleStyle(
-                          dataModuleShape: QrDataModuleShape.circle,
-                          color: AppTheme.primaryColor,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        OutlinedButton(
-                          onPressed: () {
-                            setState(() {
-                              _qrData = null;
-                              _successMessage = null;
-                            });
-                          },
-                          child: const Text('Cancel'),
-                        ),
-                        ElevatedButton.icon(
-                          onPressed: _confirmPayment,
-                          icon: const Icon(Icons.check, size: 18),
-                          label: const Text('Confirm Paid'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.successColor,
-                          ),
-                        ),
-                      ],
+                    GestureDetector(
+                      onTap: () => setState(() => _error = null),
+                      child: const Icon(Icons.close,
+                          size: 16, color: AppTheme.errorColor),
                     ),
                   ],
                 ),
               ),
             ],
 
-            // Success message
-            if (_successMessage != null && _qrData == null) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppTheme.successColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                      color: AppTheme.successColor.withOpacity(0.3)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.check_circle,
-                        color: AppTheme.successColor),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        _successMessage!,
-                        style: const TextStyle(
-                          color: AppTheme.successColor,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+            // ── Token QR (legacy / merchant-facing) ──────────
+            const SizedBox(height: 16),
+            _TokenQRSection(
+              amountCtrl: _amountCtrl,
+              qrData: _qrData,
+              isProcessing: _isProcessing,
+              onGenerate: _generateTokenQR,
+              onConfirm: _confirmTokenPayment,
+              onCancel: () => setState(() {
+                _qrData = null;
+                _amountCtrl.clear();
+              }),
+            ),
+            const SizedBox(height: 32),
           ],
         ),
       ),
@@ -876,21 +886,316 @@ class _PayScreenState extends State<PayScreen> {
   }
 }
 
-/// Thin wrapper so pay_screen can call ApiService without importing Provider.
-class _ApiHelper {
-  static final _api = ApiService();
+// ── Offline limit card ─────────────────────────────────────────────────────
 
-  static Future<void> postOnlinePayment({
-    required String receiverId,
-    required String receiverName,
-    required double amount,
-    required String nonce,
-  }) async {
-    await _api.post('/api/payments/online', {
-      'receiver_id': receiverId,
-      'receiver_name': receiverName,
-      'amount': amount,
-      'nonce': nonce,
-    });
+class _OfflineLimitCard extends StatelessWidget {
+  final bool isOnline;
+  final double remaining;
+  final double total;
+
+  const _OfflineLimitCard({
+    required this.isOnline,
+    required this.remaining,
+    required this.total,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fraction = total > 0 ? (remaining / total).clamp(0.0, 1.0) : 0.0;
+    final barColor = fraction > 0.5
+        ? AppTheme.successColor
+        : fraction > 0.2
+            ? AppTheme.warningColor
+            : AppTheme.errorColor;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                isOnline ? Icons.wifi : Icons.wifi_off,
+                size: 16,
+                color: isOnline ? AppTheme.successColor : AppTheme.offlineColor,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                isOnline ? 'Online — bank payments enabled' : 'Offline Mode',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isOnline ? AppTheme.successColor : AppTheme.offlineColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Offline Credit Limit',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 2),
+                  RichText(
+                    text: TextSpan(
+                      children: [
+                        TextSpan(
+                          text: '₹${remaining.toStringAsFixed(0)}',
+                          style: const TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.primaryColor,
+                          ),
+                        ),
+                        TextSpan(
+                          text: ' / ₹${total.toStringAsFixed(0)}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey.shade500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '${(fraction * 100).round()}%',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: barColor,
+                    ),
+                  ),
+                  const Text('remaining',
+                      style: TextStyle(fontSize: 11, color: Colors.grey)),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: fraction,
+              minHeight: 6,
+              backgroundColor: Colors.grey.shade100,
+              valueColor: AlwaysStoppedAnimation<Color>(barColor),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Token QR section ──────────────────────────────────────────────────────
+
+class _TokenQRSection extends StatelessWidget {
+  final TextEditingController amountCtrl;
+  final String? qrData;
+  final bool isProcessing;
+  final VoidCallback onGenerate;
+  final VoidCallback onConfirm;
+  final VoidCallback onCancel;
+
+  const _TokenQRSection({
+    required this.amountCtrl,
+    required this.qrData,
+    required this.isProcessing,
+    required this.onGenerate,
+    required this.onConfirm,
+    required this.onCancel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.qr_code, color: AppTheme.primaryColor, size: 20),
+              const SizedBox(width: 8),
+              const Text(
+                'Generate Token QR',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.primaryColor,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppTheme.lightBlue,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text(
+                  'Merchant scans you',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.primaryColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Show this QR to a merchant — they scan it to accept your payment.',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+          ),
+          const SizedBox(height: 16),
+
+          if (qrData == null) ...[
+            TextFormField(
+              controller: amountCtrl,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w700,
+              ),
+              decoration: const InputDecoration(
+                prefixText: '₹ ',
+                prefixStyle: TextStyle(
+                    fontSize: 24, fontWeight: FontWeight.w700),
+                hintText: '0',
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [50, 100, 200, 500].map((v) {
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: GestureDetector(
+                    onTap: () => amountCtrl.text = v.toString(),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: AppTheme.lightBlue,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Text('₹$v',
+                          style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.primaryColor)),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton.icon(
+                onPressed: isProcessing ? null : onGenerate,
+                icon: isProcessing
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.qr_code, size: 18),
+                label: Text(isProcessing ? 'Generating…' : 'Generate QR'),
+              ),
+            ),
+          ] else ...[
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppTheme.lightBlue,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: QrImageView(
+                  data: qrData!,
+                  version: QrVersions.auto,
+                  size: 200,
+                  backgroundColor: Colors.white,
+                  eyeStyle: const QrEyeStyle(
+                    eyeShape: QrEyeShape.circle,
+                    color: AppTheme.primaryColor,
+                  ),
+                  dataModuleStyle: const QrDataModuleStyle(
+                    dataModuleShape: QrDataModuleShape.circle,
+                    color: AppTheme.primaryColor,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Center(
+              child: Text(
+                'Show this to the merchant to scan',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: onCancel,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.primaryColor,
+                      side: const BorderSide(color: AppTheme.primaryColor),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton.icon(
+                    onPressed: onConfirm,
+                    icon: const Icon(Icons.check, size: 18),
+                    label: const Text('Merchant Scanned'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.successColor,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }

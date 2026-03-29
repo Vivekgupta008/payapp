@@ -1,0 +1,56 @@
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',Arial,sans-serif;}
+body{background:#E8F4FD;width:390px;min-height:844px;position:relative;overflow:hidden;}
+.appbar{background:#002970;padding:52px 20px 16px;color:white;}
+.appbar-top{display:flex;justify-content:space-between;align-items:center;}
+.logo{font-size:22px;font-weight:900;}
+.logo span{color:#00B9F1;}
+.avatar{width:38px;height:38px;border-radius:50%;background:#00B9F1;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;}
+.greeting{font-size:13px;color:rgba(255,255,255,0.6);margin-top:4px;}
+.name{font-size:16px;font-weight:600;color:white;}
+.offline-banner{background:#E65100;color:white;text-align:center;font-size:12px;font-weight:600;padding:8px 16px;}
+.body{padding:16px;}
+.card{background:white;border-radius:16px;padding:20px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);}
+.balance-label{font-size:12px;color:#888;margin-bottom:4px;}
+.balance{font-size:38px;font-weight:900;color:#002970;letter-spacing:-1px;}
+.offline-pill{display:inline-flex;align-items:center;gap:6px;background:#E8F4FD;border-radius:20px;padding:4px 12px;font-size:12px;color:#002970;font-weight:600;margin-top:8px;cursor:pointer;}
+.actions{display:flex;gap:10px;margin-top:14px;}
+.btn-primary{flex:1;background:#002970;color:white;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;}
+.btn-outline{flex:1;background:white;color:#002970;border:2px solid #002970;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;}
+.section-title{font-size:15px;font-weight:700;color:#1A1A2E;margin-bottom:10px;}
+.tx-item{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #F5F5F5;}
+.tx-icon{width:40px;height:40px;border-radius:50%;background:#E8F4FD;display:flex;align-items:center;justify-content:center;font-size:18px;}
+.tx-name{font-size:14px;font-weight:600;color:#1A1A2E;}
+.tx-sub{font-size:11px;color:#888;}
+.tx-amount{margin-left:auto;font-size:14px;font-weight:700;}
+.tx-amount.out{color:#E53935;}
+.tx-amount.in{color:#4CAF50;}
+</style></head><body>
+<div class="appbar">
+  <div class="appbar-top">
+    <div><div class="logo">Pay<span>tm</span></div></div>
+    <div class="avatar">RK</div>
+  </div>
+  <div class="greeting">Good morning,</div>
+  <div class="name">Rajesh Kumar</div>
+</div>
+<div class="offline-banner">📵 Offline Mode &nbsp;·&nbsp; Payments use your offline credit limit</div>
+<div class="body">
+  <div class="card">
+    <div class="balance-label">Wallet Balance</div>
+    <div class="balance">₹4,250</div>
+    <div class="offline-pill">₹1,450 offline ⓘ</div>
+    <div class="actions">
+      <button class="btn-primary">📷 Scan QR</button>
+      <button class="btn-outline">🔲 My QR</button>
+    </div>
+  </div>
+  <div class="section-title">Recent Activity</div>
+  <div class="card" style="padding:4px 16px;">
+    <div class="tx-item"><div class="tx-icon">🏪</div><div><div class="tx-name">Suresh Store</div><div class="tx-sub">Offline · Pending sync</div></div><div class="tx-amount out">-₹250</div></div>
+    <div class="tx-item"><div class="tx-icon">👤</div><div><div class="tx-name">Priya Sharma</div><div class="tx-sub">Online · Settled</div></div><div class="tx-amount in">+₹500</div></div>
+    <div class="tx-item" style="border:none"><div class="tx-icon">📡</div><div><div class="tx-name">Amit BLE</div><div class="tx-sub">Bluetooth · Pending sync</div></div><div class="tx-amount out">-₹150</div></div>
+  </div>
+</div>
+</body></html>

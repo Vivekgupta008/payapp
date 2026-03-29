@@ -1,0 +1,27 @@
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>body{margin:0;padding:32px;background:#0a1628;} </style></head><body>
+<div class="mermaid">
+%%{init:{'theme':'dark','themeVariables':{'primaryColor':'#002970','primaryTextColor':'#fff','primaryBorderColor':'#00B9F1','lineColor':'#00B9F1','secondaryColor':'#003DA5','tertiaryColor':'#0a1628','fontFamily':'Arial','edgeLabelBackground':'#0a1628'}}}%%
+flowchart TD
+    A["🔄 User Syncs Online"] --> B["Feature Extraction"]
+    B --> C["📊 Input Features\n━━━━━━━━━━━━━━━━━━\ntransaction_count_30d\navg_transaction_value\naccount_age_days\nkyc_tier  ·  fraud_flags\ndevice_trust_score"]
+    C --> D["🧠 sklearn LogisticRegression\n+ Rule-based fallback"]
+    D --> E{{"Risk Score\n0 – 100"}}
+    E -->|"Score 0–20"| F["🔴 ₹0\nBLOCKED"]
+    E -->|"Score 21–40"| G["🟠 ₹100\nMINIMAL"]
+    E -->|"Score 41–60"| H["🟡 ₹500\nLOW"]
+    E -->|"Score 61–75"| I["🟢 ₹1,500\nMEDIUM"]
+    E -->|"Score 76–88"| J["🟢 ₹3,000\nHIGH"]
+    E -->|"Score 89–100"| K["💎 ₹5,000\nPREMIUM"]
+    F & G & H & I & J & K --> L["💾 Cache in SharedPrefs\nTTL: 24 hours"]
+    L --> M["📱 Show in App\nwith explainability UI"]
+    L --> N["🔁 Local Re-scoring\n10% penalty per\npending blob · floor 30%"]
+
+    style D fill:#002970,color:#fff,stroke:#00B9F1,stroke-width:2px
+    style E fill:#FFD700,color:#002970,stroke:#002970,stroke-width:2px
+    style C fill:#0d1f3c,color:#fff,stroke:#00B9F1,stroke-width:1px
+    style N fill:#003DA5,color:#fff,stroke:#00B9F1,stroke-width:1px
+</div>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true});</script>
+</body></html>

@@ -1,0 +1,34 @@
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>body{margin:0;padding:32px;background:#0a1628;} </style></head><body>
+<div class="mermaid">
+%%{init:{'theme':'dark','themeVariables':{'primaryColor':'#002970','primaryTextColor':'#fff','primaryBorderColor':'#00B9F1','lineColor':'#00B9F1','secondaryColor':'#00B9F1','tertiaryColor':'#0a1628','fontFamily':'Arial','activationBkgColor':'#003DA5','activationBorderColor':'#00B9F1','labelBoxBkgColor':'#0d1f3c','labelBoxBorderColor':'#00B9F1','labelTextColor':'#fff','loopTextColor':'#00B9F1','noteBkgColor':'#003380','noteTextColor':'#fff'}}}%%
+sequenceDiagram
+    participant S as 📱 Sender<br/>(Online)
+    participant B as ☁️ Backend
+    participant DB as 🗄️ Database
+    participant R as 📱 Receiver<br/>(Offline)
+    participant SYNC as 🔄 SyncEngine
+
+    S->>S: Scan QR, enter amount
+    S->>S: connectivity_plus → ONLINE
+    S->>B: POST /payments/online { amount, receiverId }
+    B->>B: Debit sender bank ✓
+    B->>DB: Store credit as pending_receiver_sync
+    B->>S: { status: success }
+    S->>S: Show "Payment Sent ✓"
+
+    Note over R: Receiver is offline — no real-time push
+
+    Note over R,SYNC: ── Receiver reconnects ──
+
+    R->>SYNC: ConnectivityService → online
+    SYNC->>B: GET /user/pending-credits
+    B->>DB: Fetch pending_receiver_sync records
+    B->>SYNC: [{ amount, sender, timestamp }]
+    SYNC->>R: Update local balance
+    SYNC->>R: Push notification "₹500 received ✓"
+    B->>DB: Mark records settled
+</div>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true});</script>
+</body></html>

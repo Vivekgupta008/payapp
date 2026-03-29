@@ -6,9 +6,27 @@ import '../../providers/transaction_provider.dart';
 import '../../widgets/transaction_tile.dart';
 import '../../config/theme.dart';
 import '../home_screen.dart';
+import '../show_qr_screen.dart';
 
-class UserDashboard extends StatelessWidget {
+class UserDashboard extends StatefulWidget {
   const UserDashboard({super.key});
+
+  @override
+  State<UserDashboard> createState() => _UserDashboardState();
+}
+
+class _UserDashboardState extends State<UserDashboard> {
+  Future<void> _refresh() async {
+    final auth = context.read<AuthProvider>();
+    final wallet = context.read<WalletProvider>();
+    final txProvider = context.read<TransactionProvider>();
+    await auth.refreshUser();
+    await txProvider.loadLocalTransactions(userId: auth.user?.id);
+    if (wallet.isOnline) {
+      await wallet.requestTokens();
+      await txProvider.fetchServerTransactions(isUser: true);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +47,11 @@ class UserDashboard extends StatelessWidget {
       backgroundColor: AppTheme.lightBlue,
       body: Stack(
         children: [
-          CustomScrollView(
+          RefreshIndicator(
+            onRefresh: _refresh,
+            color: AppTheme.navyBlue,
+            child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               // ── App Bar ───────────────────────────────────────────
               SliverAppBar(
@@ -45,37 +67,40 @@ class UserDashboard extends StatelessWidget {
                     child: Row(
                       children: [
                         // Avatar + menu
-                        Stack(
-                          children: [
-                            CircleAvatar(
-                              radius: 20,
-                              backgroundColor: AppTheme.yellow,
-                              child: Text(
-                                initials,
-                                style: const TextStyle(
-                                  color: AppTheme.navyBlue,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
+                        GestureDetector(
+                          onTap: () => _showProfileSheet(context, auth, user?.fullName ?? 'User', user?.email ?? '', initials),
+                          child: Stack(
+                            children: [
+                              CircleAvatar(
+                                radius: 20,
+                                backgroundColor: AppTheme.yellow,
+                                child: Text(
+                                  initials,
+                                  style: const TextStyle(
+                                    color: AppTheme.navyBlue,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
                                 ),
                               ),
-                            ),
-                            Positioned(
-                              bottom: 0,
-                              right: 0,
-                              child: Container(
-                                width: 14,
-                                height: 14,
-                                decoration: BoxDecoration(
-                                  color: AppTheme.navyBlue,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                      color: AppTheme.lightBlue, width: 1.5),
+                              Positioned(
+                                bottom: 0,
+                                right: 0,
+                                child: Container(
+                                  width: 14,
+                                  height: 14,
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.navyBlue,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                        color: AppTheme.lightBlue, width: 1.5),
+                                  ),
+                                  child: const Icon(Icons.menu,
+                                      size: 8, color: Colors.white),
                                 ),
-                                child: const Icon(Icons.menu,
-                                    size: 8, color: Colors.white),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                         const Spacer(),
                         // Paytm UPI logo
@@ -280,15 +305,24 @@ class UserDashboard extends StatelessWidget {
                                 color: AppTheme.green,
                               ),
                               const SizedBox(width: 8),
-                              _BalancePill(
-                                label:
-                                    '₹${wallet.offlineLimitRemaining.toStringAsFixed(0)} offline',
-                                color: wallet.isOnline
-                                    ? AppTheme.navyBlue
-                                    : AppTheme.orange,
-                                icon: wallet.isOnline
-                                    ? null
-                                    : Icons.wifi_off,
+                              GestureDetector(
+                                onTap: () => _showLimitExplanation(
+                                  context,
+                                  wallet.offlineLimitRemaining,
+                                  wallet.offlineLimit,
+                                  wallet.riskScore,
+                                  wallet.riskFactors,
+                                ),
+                                child: _BalancePill(
+                                  label:
+                                      '₹${wallet.offlineLimitRemaining.toStringAsFixed(0)} offline ⓘ',
+                                  color: wallet.isOnline
+                                      ? AppTheme.navyBlue
+                                      : AppTheme.orange,
+                                  icon: wallet.isOnline
+                                      ? null
+                                      : Icons.wifi_off,
+                                ),
                               ),
                             ],
                           ),
@@ -508,54 +542,511 @@ class UserDashboard extends StatelessWidget {
               ),
             ],
           ),
+          ),  // RefreshIndicator
 
-          // ── Floating "Scan Any QR" button ─────────────────────────
+          // ── Floating action buttons ────────────────────────────────
           Positioned(
             bottom: 16,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: GestureDetector(
-                onTap: () => context
-                    .findAncestorStateOfType<HomeScreenState>()
-                    ?.setTab(1),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 28, vertical: 14),
-                  decoration: BoxDecoration(
-                    color: AppTheme.navyBlue,
-                    borderRadius: BorderRadius.circular(40),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.navyBlue.withOpacity(0.4),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6),
+            left: 24,
+            right: 24,
+            child: Row(
+              children: [
+                // Scan Any QR
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => context
+                        .findAncestorStateOfType<HomeScreenState>()
+                        ?.setTab(1),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(
+                        color: AppTheme.navyBlue,
+                        borderRadius: BorderRadius.circular(40),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.navyBlue.withOpacity(0.35),
+                            blurRadius: 12,
+                            offset: const Offset(0, 5),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Icon(Icons.qr_code_scanner,
-                          color: Colors.white, size: 22),
-                      SizedBox(width: 10),
-                      Text(
-                        'Scan Any QR',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15,
-                          letterSpacing: 0.3,
-                        ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.qr_code_scanner,
+                              color: Colors.white, size: 20),
+                          SizedBox(width: 8),
+                          Text(
+                            'Scan QR',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
-              ),
+                const SizedBox(width: 12),
+                // My QR
+                Expanded(
+                  child: Builder(builder: (ctx) {
+                    final u = ctx.read<AuthProvider>().user;
+                    return GestureDetector(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ShowQRScreen(
+                            userId: u?.id ?? '',
+                            userName: u?.fullName ?? 'User',
+                            userEmail: u?.email,
+                          ),
+                        ),
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(40),
+                          border: Border.all(
+                              color: AppTheme.navyBlue.withOpacity(0.3),
+                              width: 1.5),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.08),
+                              blurRadius: 12,
+                              offset: const Offset(0, 5),
+                            ),
+                          ],
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.qr_code,
+                                color: AppTheme.navyBlue, size: 20),
+                            SizedBox(width: 8),
+                            Text(
+                              'My QR',
+                              style: TextStyle(
+                                color: AppTheme.navyBlue,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+void _showLimitExplanation(
+  BuildContext context,
+  double remaining,
+  double total,
+  double riskScore,
+  Map<String, dynamic> riskFactors,
+) {
+  // Human-readable factor labels and contribution direction
+  const factorMeta = {
+    'kyc_tier':              ('KYC Verification Tier',    true),
+    'device_trust_score':    ('Device Trust Score',       true),
+    'transaction_count':     ('Transaction History',      true),
+    'days_since_registration': ('Account Age',            true),
+    'fraud_flags':           ('Fraud Flags',              false),
+  };
+
+  // Map risk score to limit tier label
+  String limitTier;
+  if (riskScore < 0.2)       limitTier = '₹5,000 (Max)';
+  else if (riskScore < 0.4)  limitTier = '₹3,000';
+  else if (riskScore < 0.6)  limitTier = '₹1,500';
+  else if (riskScore < 0.8)  limitTier = '₹500';
+  else if (riskScore < 0.9)  limitTier = '₹100 (Min)';
+  else                       limitTier = '₹0 (Restricted)';
+
+  final riskPct = ((1.0 - riskScore) * 100).round();
+
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    builder: (_) => Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Handle
+            Center(
+              child: Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Header
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.navyBlue.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.offline_bolt,
+                      color: AppTheme.navyBlue, size: 22),
+                ),
+                const SizedBox(width: 14),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Offline Credit Limit',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.navyBlue,
+                      ),
+                    ),
+                    Text(
+                      'AI-assigned based on your profile',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // Limit summary
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppTheme.lightBlue,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Available',
+                            style: TextStyle(
+                                fontSize: 11, color: Colors.grey.shade600)),
+                        Text(
+                          '₹${remaining.toStringAsFixed(0)}',
+                          style: const TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w900,
+                            color: AppTheme.navyBlue,
+                          ),
+                        ),
+                        Text('of ₹${total.toStringAsFixed(0)} total',
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.grey.shade500)),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('Credit Score',
+                          style: TextStyle(
+                              fontSize: 11, color: Colors.grey.shade600)),
+                      Text(
+                        '$riskPct',
+                        style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w900,
+                          color: AppTheme.paytmBlue,
+                        ),
+                      ),
+                      Text('/ 100',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey.shade500)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // Progress bar
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: (1.0 - riskScore).clamp(0.0, 1.0),
+                minHeight: 8,
+                backgroundColor: Colors.grey.shade200,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  riskScore < 0.4
+                      ? AppTheme.successColor
+                      : riskScore < 0.7
+                          ? AppTheme.orange
+                          : Colors.red,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            const Text(
+              'How your limit is calculated',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.navyBlue,
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Factor rows
+            if (riskFactors.isEmpty)
+              Text(
+                'Connect to internet to load your detailed breakdown.',
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+              )
+            else
+              ...riskFactors.entries.map((e) {
+                final meta = factorMeta[e.key];
+                if (meta == null) return const SizedBox.shrink();
+                final label = meta.$1;
+                final isPositive = meta.$2;
+                final val = (e.value as num).toDouble().abs();
+                // Normalise contribution bar (max ~0.3 per factor)
+                final barFraction = (val / 0.35).clamp(0.0, 1.0);
+                final color = isPositive ? AppTheme.successColor : Colors.red.shade400;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            isPositive ? Icons.check_circle_outline : Icons.warning_amber_outlined,
+                            size: 14,
+                            color: color,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(label,
+                                style: const TextStyle(
+                                    fontSize: 13, fontWeight: FontWeight.w500)),
+                          ),
+                          Text(
+                            isPositive ? '+${(barFraction * 100).round()} pts' : '-${(barFraction * 100).round()} pts',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: color,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(3),
+                        child: LinearProgressIndicator(
+                          value: barFraction,
+                          minHeight: 5,
+                          backgroundColor: Colors.grey.shade100,
+                          valueColor: AlwaysStoppedAnimation<Color>(color),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.lightBlue,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline,
+                      size: 14, color: AppTheme.paytmBlue),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Limit tier: $limitTier · Refreshes every 24 hours when online.',
+                      style: const TextStyle(
+                          fontSize: 11, color: AppTheme.navyBlue),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+void _showProfileSheet(BuildContext context, AuthProvider auth, String fullName, String email, String initials) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    builder: (_) => Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle bar
+            Container(
+              margin: const EdgeInsets.only(top: 10),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Profile header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 28,
+                    backgroundColor: AppTheme.yellow,
+                    child: Text(
+                      initials,
+                      style: const TextStyle(
+                        color: AppTheme.navyBlue,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          fullName,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.navyBlue,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          email,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+            Divider(color: Colors.grey.shade100, height: 1),
+
+            // Menu items
+            _ProfileTile(icon: Icons.person_outline, label: 'Edit Profile', onTap: () => Navigator.pop(context)),
+            _ProfileTile(icon: Icons.verified_user_outlined, label: 'KYC Status', onTap: () => Navigator.pop(context)),
+            _ProfileTile(icon: Icons.lock_outline, label: 'Privacy & Security', onTap: () => Navigator.pop(context)),
+            _ProfileTile(icon: Icons.help_outline, label: 'Help & Support', onTap: () => Navigator.pop(context)),
+            _ProfileTile(icon: Icons.info_outline, label: 'About', onTap: () => Navigator.pop(context)),
+
+            Divider(color: Colors.grey.shade100, height: 1),
+
+            // Logout
+            _ProfileTile(
+              icon: Icons.logout,
+              label: 'Logout',
+              color: Colors.red.shade600,
+              onTap: () async {
+                Navigator.pop(context);
+                await auth.logout();
+              },
+            ),
+
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _ProfileTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Color? color;
+
+  const _ProfileTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = color ?? AppTheme.navyBlue;
+    return ListTile(
+      leading: Icon(icon, color: c, size: 22),
+      title: Text(
+        label,
+        style: TextStyle(
+          fontSize: 15,
+          color: c,
+          fontWeight: color != null ? FontWeight.w600 : FontWeight.w500,
+        ),
+      ),
+      trailing: color == null
+          ? Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 20)
+          : null,
+      onTap: onTap,
+      dense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
     );
   }
 }

@@ -1,0 +1,47 @@
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',Arial,sans-serif;}
+body{background:white;width:390px;min-height:844px;}
+.hero{background:#E8F4FD;padding:40px 24px 0;text-align:center;}
+.close{text-align:left;margin-bottom:8px;color:#002970;font-size:20px;}
+.logo{font-size:22px;font-weight:900;color:#002970;margin-bottom:20px;}
+.logo span{color:#00B9F1;}
+.status{font-size:18px;font-weight:700;color:#22A45D;margin-bottom:12px;}
+.amount-row{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:6px;}
+.amount{font-size:52px;font-weight:900;color:#002970;letter-spacing:-2px;}
+.badge{width:40px;height:40px;background:#22A45D;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-size:20px;}
+.words{font-size:13px;color:#888;margin-bottom:20px;}
+.bar{height:5px;background:linear-gradient(90deg,#002970,#00B9F1);margin-top:20px;}
+.scallop{display:flex;justify-content:center;margin-top:-1px;}
+.details{padding:8px 24px 24px;}
+.detail-row{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid #F5F5F5;}
+.detail-label{font-size:13px;color:#888;}
+.detail-val{font-size:13px;font-weight:600;color:#1A1A2E;}
+.detail-val.primary{color:#002970;font-weight:700;}
+.mode-chip{background:#E8F4FD;border:1px solid #cde;border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;color:#22A45D;}
+.footer{text-align:center;padding:16px;font-size:11px;color:#999;}
+.footer span{font-weight:700;}
+.done-btn{margin:8px 24px 0;display:block;background:#002970;color:white;border:none;border-radius:12px;padding:14px;font-size:16px;font-weight:700;width:calc(100% - 48px);cursor:pointer;}
+</style></head><body>
+<div class="hero">
+  <div class="close">✕</div>
+  <div class="logo">Pay<span>tm</span></div>
+  <div class="status">Payment Successful</div>
+  <div class="amount-row">
+    <div class="amount">₹500</div>
+    <div class="badge">✓</div>
+  </div>
+  <div class="words">Rupees Five Hundred Only</div>
+  <div class="bar"></div>
+</div>
+<div class="details">
+  <div class="detail-row"><div class="detail-label">To</div><div class="detail-val primary">Geeta Rani</div></div>
+  <div class="detail-row"><div class="detail-label">From</div><div class="detail-val">Raj Bhargava</div></div>
+  <div class="detail-row"><div class="detail-label">Amount</div><div class="detail-val primary">₹500.00</div></div>
+  <div class="detail-row"><div class="detail-label">Mode</div><div class="mode-chip">🌐 Online</div></div>
+  <div class="detail-row"><div class="detail-label">Payment ID</div><div class="detail-val" style="color:#002970;font-size:12px;font-family:monospace">4416342 52587</div></div>
+  <div class="detail-row" style="border:none"><div class="detail-label">Date & Time</div><div class="detail-val">30 Mar 2026, 11:16 AM</div></div>
+</div>
+<button class="done-btn">Done</button>
+<div class="footer">Powered by <span style="color:#6A5ACD">UPI</span> | <span style="color:#002970">Pay</span><span style="color:#00B9F1">tm</span> Payments Bank</div>
+</body></html>

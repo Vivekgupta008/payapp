@@ -76,10 +76,50 @@ class HomeScreenState extends State<HomeScreen> {
       const SettlementScreen(),
     ];
 
+    final isOnline = context.watch<WalletProvider>().isOnline;
+
     return Scaffold(
-      body: isUser
-          ? userPages[_currentIndex.clamp(0, userPages.length - 1)]
-          : merchantPages[_currentIndex.clamp(0, merchantPages.length - 1)],
+      body: Column(
+        children: [
+          // ── Offline mode banner ───────────────────────────────
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeInOut,
+            height: isOnline ? 0 : 38,
+            color: const Color(0xFFE65100),
+            child: isOnline
+                ? const SizedBox.shrink()
+                : const SafeArea(
+                    bottom: false,
+                    child: Center(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.wifi_off,
+                              color: Colors.white, size: 14),
+                          SizedBox(width: 6),
+                          Text(
+                            'Offline Mode  •  Payments use your offline credit limit',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+          ),
+          Expanded(
+            child: isUser
+                ? userPages[_currentIndex.clamp(0, userPages.length - 1)]
+                : merchantPages[
+                    _currentIndex.clamp(0, merchantPages.length - 1)],
+          ),
+        ],
+      ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.white,

@@ -36,13 +36,17 @@ class ApiService {
 
   Future<Map<String, dynamic>> get(String endpoint) async {
     try {
-      final response = await http.get(
-        Uri.parse('${AppConstants.baseUrl}$endpoint'),
-        headers: await _headers(),
-      ).timeout(const Duration(seconds: 10));
+      final response = await http
+          .get(
+            Uri.parse('${AppConstants.baseUrl}$endpoint'),
+            headers: await _headers(),
+          )
+          .timeout(const Duration(seconds: 15));
       return _handleResponse(response);
+    } on ApiException {
+      rethrow;
     } catch (e) {
-      throw ApiException('Network error: $e');
+      throw ApiException('Connection failed. Check your internet and try again.');
     }
   }
 
@@ -51,25 +55,46 @@ class ApiService {
     Map<String, dynamic> body,
   ) async {
     try {
-      final response = await http.post(
-        Uri.parse('${AppConstants.baseUrl}$endpoint'),
-        headers: await _headers(),
-        body: jsonEncode(body),
-      ).timeout(const Duration(seconds: 15));
+      final response = await http
+          .post(
+            Uri.parse('${AppConstants.baseUrl}$endpoint'),
+            headers: await _headers(),
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 20));
       return _handleResponse(response);
+    } on ApiException {
+      rethrow;
     } catch (e) {
-      throw ApiException('Network error: $e');
+      throw ApiException('Connection failed. Check your internet and try again.');
     }
   }
 
   Map<String, dynamic> _handleResponse(http.Response response) {
-    final body = jsonDecode(response.body);
+    // Guard against non-JSON responses (HTML error pages from Render/proxy)
+    dynamic body;
+    try {
+      body = jsonDecode(response.body);
+    } catch (_) {
+      if (response.statusCode == 503 || response.statusCode == 502) {
+        throw ApiException(
+          'Server is starting up — please wait a moment and try again.',
+          statusCode: response.statusCode,
+        );
+      }
+      throw ApiException(
+        'Unexpected server response (${response.statusCode}). Please try again.',
+        statusCode: response.statusCode,
+      );
+    }
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return body is Map<String, dynamic> ? body : {'data': body};
     }
 
-    final detail = body is Map ? (body['detail'] ?? 'Unknown error') : 'Unknown error';
+    final detail = body is Map
+        ? (body['detail'] ?? body['message'] ?? 'Request failed')
+        : 'Request failed';
     throw ApiException(detail.toString(), statusCode: response.statusCode);
   }
 }

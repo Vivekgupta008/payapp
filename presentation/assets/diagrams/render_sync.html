@@ -1,0 +1,29 @@
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>body{margin:0;padding:32px;background:#0a1628;} </style></head><body>
+<div class="mermaid">
+%%{init:{'theme':'dark','themeVariables':{'primaryColor':'#002970','primaryTextColor':'#fff','primaryBorderColor':'#00B9F1','lineColor':'#00B9F1','secondaryColor':'#003DA5','tertiaryColor':'#0a1628','fontFamily':'Arial','edgeLabelBackground':'#0a1628'}}}%%
+flowchart TD
+    A["📶 Connectivity Restored\nconnectivity_plus event"] --> B["SyncEngine.wake"]
+    B --> C["Load pending blobs\nfrom SQLite"]
+    C --> D{{"Any\nblobs?"}}
+    D -->|No| E["✅ Nothing to sync\nAll settled"]
+    D -->|Yes| F["POST /offline/sync\narray of signed blobs"]
+    F --> G["Backend validates each blob\nEd25519 · nonce · fraud score"]
+    G --> H["Deduplicate by\nsender + receiver + nonce + ts"]
+    H --> I{{"Per-blob\nresult"}}
+    I -->|"✅ accepted"| J["Debit sender bank\nCredit receiver\nMark blob synced"]
+    I -->|"❌ rejected"| K["Reverse local limit\nNotify user\nLog fraud signal"]
+    I -->|"⚠️ adjusted"| L["Partial settlement\nNotify difference\nRecalculate limit"]
+    J & K & L --> M["Recalculate ML limit\nPush new limit to device"]
+    M --> N["Update SharedPrefs\nRefresh UI badge"]
+    N --> O["Clear synced blobs\nafter 7 days"]
+
+    style A fill:#002970,color:#fff,stroke:#00B9F1,stroke-width:2px
+    style F fill:#002970,color:#fff,stroke:#FFD700,stroke-width:2px
+    style J fill:#22c55e,color:#fff,stroke:#16a34a
+    style K fill:#ef4444,color:#fff,stroke:#dc2626
+    style L fill:#f59e0b,color:#002970,stroke:#d97706
+</div>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true});</script>
+</body></html>

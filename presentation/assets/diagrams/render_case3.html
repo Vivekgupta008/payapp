@@ -1,0 +1,41 @@
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>body{margin:0;padding:32px;background:#0a1628;} </style></head><body>
+<div class="mermaid">
+%%{init:{'theme':'dark','themeVariables':{'primaryColor':'#002970','primaryTextColor':'#fff','primaryBorderColor':'#00B9F1','lineColor':'#00B9F1','secondaryColor':'#00B9F1','tertiaryColor':'#0a1628','fontFamily':'Arial','activationBkgColor':'#003DA5','activationBorderColor':'#00B9F1','labelBoxBkgColor':'#0d1f3c','labelBoxBorderColor':'#00B9F1','labelTextColor':'#fff','loopTextColor':'#00B9F1','noteBkgColor':'#003380','noteTextColor':'#fff'}}}%%
+sequenceDiagram
+    participant S as 📱 Sender<br/>(Offline)
+    participant BLE as 📡 Bluetooth LE
+    participant R as 📱 Receiver<br/>(Offline)
+    participant SQ as 🗃️ Sender<br/>SQLite
+    participant RQ as 🗃️ Receiver<br/>SQLite
+    participant B as ☁️ Backend
+
+    R->>R: Generate BLE UUID per session
+    R->>R: Embed UUID in QR code
+    R->>BLE: Start GATT server advertising
+
+    S->>S: Scan QR → receiverId + BLE UUID
+    S->>S: Both offline detected
+    S->>BLE: Scan for UUID service
+    BLE->>S: Found receiver device
+    S->>BLE: Connect GATT channel
+    BLE->>R: Connection established ✓
+
+    S->>S: Create signed PaymentBlob (Ed25519)
+    S->>SQ: Enqueue blob locally
+    S->>BLE: Transfer blob JSON bytes
+    BLE->>R: Blob received ✓
+    R->>R: Verify Ed25519 signature
+    R->>RQ: Store blob locally
+    R->>S: BLE ACK
+    S->>S: Deduct from offline limit
+
+    Note over SQ,RQ: ── Either party reconnects first ──
+
+    SQ->>B: POST /offline/sync [blob]
+    B->>B: Deduplicate by sender+receiver+nonce
+    B->>B: Settle both sides ✓
+</div>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true});</script>
+</body></html>

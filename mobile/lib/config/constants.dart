@@ -8,8 +8,8 @@ class AppConstants {
   static String get baseUrl {
     if (_envUrl.isNotEmpty) return _envUrl;
     if (kIsWeb) return 'http://127.0.0.1:8000';
-    if (defaultTargetPlatform == TargetPlatform.android) return 'http://10.0.2.2:8000';
-    return 'http://192.168.1.3:8000'; // local Mac IP for iOS dev
+    if (defaultTargetPlatform == TargetPlatform.android) return 'https://offlinepay-api.onrender.com';
+    return 'https://offlinepay-api.onrender.com'; // production
   }
 
   // Storage keys
