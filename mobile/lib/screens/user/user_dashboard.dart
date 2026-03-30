@@ -7,6 +7,7 @@ import '../../widgets/transaction_tile.dart';
 import '../../config/theme.dart';
 import '../home_screen.dart';
 import '../show_qr_screen.dart';
+import 'risk_profile_screen.dart';
 
 class UserDashboard extends StatefulWidget {
   const UserDashboard({super.key});
@@ -306,12 +307,11 @@ class _UserDashboardState extends State<UserDashboard> {
                               ),
                               const SizedBox(width: 8),
                               GestureDetector(
-                                onTap: () => _showLimitExplanation(
+                                onTap: () => Navigator.push(
                                   context,
-                                  wallet.offlineLimitRemaining,
-                                  wallet.offlineLimit,
-                                  wallet.riskScore,
-                                  wallet.riskFactors,
+                                  MaterialPageRoute(
+                                      builder: (_) =>
+                                          const RiskProfileScreen()),
                                 ),
                                 child: _BalancePill(
                                   label:
