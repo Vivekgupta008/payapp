@@ -124,9 +124,8 @@ class SyncEngine {
         final current = await _limitService.getAvailableLimit();
         final total = await _limitService.getTotalLimit();
         final restored = (current + limitToRestore).clamp(0.0, total);
-        // Write directly via internal update (reuse updateLimitFromSync
-        // but only update remaining, not total or expiry)
-        await _limitService.updateLimitFromSync(restored);
+        // Only restore the remaining balance — do NOT reset total or expiry
+        await _limitService.updateRemainingOnly(restored);
       }
 
       // Fetch fresh limit from backend after sync

@@ -77,10 +77,18 @@ class OfflineLimitService {
   }
 
   /// Saves a new limit (called after a successful sync when the backend
-  /// pushes a recalculated limit).
+  /// pushes a recalculated limit). Updates total, remaining, and expiry.
   Future<void> updateLimitFromSync(double newLimit) async {
     final expiry = DateTime.now().add(_limitTtl);
     await _saveLimit(newLimit, expiry);
+  }
+
+  /// Updates only the remaining limit without touching the total or expiry.
+  /// Used during sync to restore rejected-blob amounts locally before the
+  /// fresh limit fetch overwrites everything.
+  Future<void> updateRemainingOnly(double remaining) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_keyRemaining, remaining);
   }
 
   /// Applies a local risk penalty to the remaining limit based on how many
