@@ -1,6 +1,18 @@
 from datetime import datetime, timedelta
+import httpx
 from sqlalchemy.orm import Session
 from ..models import Transaction, TransactionStatus, User
+
+N8N_BASE = "https://unnationalised-gerundial-hipolito.ngrok-free.dev/webhook"
+
+
+def notify_fraud(user_id: str, reason: str, fraud_flags: int):
+    try:
+        httpx.post(f"{N8N_BASE}/fraud-alert",
+                   json={"user_id": user_id, "reason": reason,
+                         "fraud_flags": fraud_flags}, timeout=3)
+    except Exception:
+        pass
 
 
 def check_fraud_signals(
@@ -61,3 +73,4 @@ def flag_user_for_fraud(db: Session, user_id: str, reason: str):
     if user:
         user.fraud_flags += 1
         db.commit()
+        notify_fraud(user_id, reason, user.fraud_flags)

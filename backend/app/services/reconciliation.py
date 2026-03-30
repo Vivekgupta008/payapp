@@ -1,4 +1,5 @@
 from datetime import datetime
+import httpx
 from sqlalchemy.orm import Session
 from ..models import (
     Transaction, TransactionStatus, OfflineToken, TokenStatus,
@@ -192,6 +193,16 @@ def reconcile_transaction(db: Session, tx_data: dict) -> dict:
         original_token.consumed_at = datetime.utcnow()
 
     db.commit()
+
+    try:
+        if receiver_id and receiver:
+            httpx.post(
+                "https://unnationalised-gerundial-hipolito.ngrok-free.dev/webhook/settlement",
+                json={"merchant_id": receiver_id, "merchant_name": tx_data.get("receiver_name", ""),
+                      "merchant_email": receiver.email,
+                      "amount": amount, "transaction_id": tx.id}, timeout=3)
+    except Exception:
+        pass
 
     return {
         "status": "settled",
