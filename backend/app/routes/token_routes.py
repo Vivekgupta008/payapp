@@ -6,7 +6,7 @@ from ..models import User, OfflineToken, TokenStatus
 from ..schemas import TokenRequest, TokenResponse, OfflineTokenData
 from ..auth import get_current_user
 from ..services.token_service import generate_offline_tokens
-from ..services.risk_engine import compute_risk_score, compute_offline_limit
+from ..services.risk_engine import compute_risk_score, compute_offline_limit, get_risk_level
 from ..config import PUBLIC_KEY_HEX, MAX_TOKENS_PER_REQUEST
 
 router = APIRouter(prefix="/api/tokens", tags=["Offline Tokens"])
@@ -154,3 +154,79 @@ def revoke_all_tokens(
     db.commit()
 
     return {"message": f"Revoked {count} tokens", "revoked_count": count}
+
+
+@router.get("/risk-profile")
+def get_risk_profile(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Return the user's full ML risk profile — actual feature values,
+    feature importances from the trained GradientBoostingClassifier,
+    the computed risk score, and the resulting offline limit.
+    Everything here is real data from the live ML model.
+    """
+    days_since_reg = (datetime.utcnow() - current_user.created_at).days
+    total_spent = current_user.avg_transaction_amount * current_user.transaction_count
+
+    user_features = {
+        "transaction_count": current_user.transaction_count,
+        "avg_transaction_amount": current_user.avg_transaction_amount,
+        "kyc_tier": current_user.kyc_tier,
+        "device_trust_score": current_user.device_trust_score,
+        "days_since_registration": days_since_reg,
+        "fraud_flags": current_user.fraud_flags,
+        "total_spent": total_spent,
+    }
+
+    risk_score, importances = compute_risk_score(user_features)
+    offline_limit = compute_offline_limit(risk_score)
+    risk_level = get_risk_level(risk_score)
+
+    # Determine direction of each feature (does higher value = lower risk?)
+    # True = higher value reduces risk, False = higher value increases risk
+    POSITIVE_FEATURES = {
+        "transaction_count", "avg_transaction_amount",
+        "kyc_tier", "device_trust_score", "days_since_registration", "total_spent",
+    }
+
+    features_detail = {}
+    for fname, fvalue in user_features.items():
+        importance = importances.get(fname, 0.0)
+        direction = "good" if fname in POSITIVE_FEATURES else "bad"
+        features_detail[fname] = {
+            "value": round(fvalue, 2) if isinstance(fvalue, float) else fvalue,
+            "importance": round(importance, 4),
+            "direction": direction,
+        }
+
+    # Build a natural-language explanation
+    kyc_labels = {0: "Unverified", 1: "Basic", 2: "Full KYC", 3: "Premium"}
+    level_labels = {
+        "very_low": "very low", "low": "low",
+        "medium": "moderate", "high": "high", "very_high": "very high",
+    }
+    explanation = (
+        f"Your offline limit is ₹{int(offline_limit):,} — based on "
+        f"{current_user.transaction_count} transaction{'s' if current_user.transaction_count != 1 else ''}, "
+        f"KYC tier {current_user.kyc_tier} ({kyc_labels.get(current_user.kyc_tier, 'Unknown')}), "
+        f"device trust score {current_user.device_trust_score:.2f}, "
+        f"and {days_since_reg} day{'s' if days_since_reg != 1 else ''} on platform. "
+        f"Risk level: {level_labels.get(risk_level, risk_level)}."
+    )
+
+    # Determine which model type is running
+    from ..ml.model import load_model
+    model = load_model()
+    model_type = type(model).__name__ if model is not None else "Heuristic"
+
+    return {
+        "risk_score": risk_score,
+        "risk_level": risk_level,
+        "offline_limit": offline_limit,
+        "model_type": model_type,
+        "explanation": explanation,
+        "features": features_detail,
+        "raw_feature_values": user_features,
+    }
