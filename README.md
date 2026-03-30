@@ -3,7 +3,7 @@
 An AI-powered offline payment system built on top of a Paytm-like Flutter + Python stack. Payments work without internet — via local credit limits, BLE device-to-device transfer, and background sync when connectivity is restored.
 
 #### APK and IPA files in release  [https://github.com/Vivekgupta008/payapp/releases/tag/app-release]
-### Demo Video Link: https://drive.google.com/file/d/1WoChgWa9LuhZAAbDqEW_2rmaIrNNCr8P/view?usp=sharing
+### Demo Video Link: [https://drive.google.com/file/d/1WoChgWa9LuhZAAbDqEW_2rmaIrNNCr8P/view?usp=sharing]
 ---
 
 ## Table of Contents
@@ -35,6 +35,8 @@ Traditional UPI payments fail the moment internet drops. This project decouples 
 ---
 
 ## Architecture
+<img width="356" height="239" alt="Screenshot 2026-03-31 at 00 39 30" src="https://github.com/user-attachments/assets/16dc5079-602b-42b7-aa5d-f063b264711b" />
+
 
 ```
 ┌────────────────────────────────────────────────────┐
@@ -68,6 +70,9 @@ Traditional UPI payments fail the moment internet drops. This project decouples 
 ---
 
 ## Payment Cases
+
+<img width="1083" height="687" alt="image" src="https://github.com/user-attachments/assets/53d25ae6-af39-4d3d-a214-ae4764827e8c" />
+
 
 ### Case 1 — Sender Offline, Receiver Online
 
