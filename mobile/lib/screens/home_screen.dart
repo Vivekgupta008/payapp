@@ -54,7 +54,7 @@ class HomeScreenState extends State<HomeScreen> {
       if(auth.isUser){
         await wallet.requestTokens();
       }
-      await txProvider.fetchServerTransactions(isUser: auth.isUser);
+      await txProvider.fetchServerTransactions(isUser: auth.isUser, userId: auth.user?.id);
     }
   }
 

@@ -7,6 +7,7 @@ import '../models/payment_token.dart';
 import '../models/transaction.dart';
 import '../config/constants.dart';
 
+
 class OfflineStorage {
   static final OfflineStorage _instance = OfflineStorage._internal();
   factory OfflineStorage() => _instance;
@@ -93,6 +94,21 @@ class OfflineStorage {
         offline_limit_at_time REAL NOT NULL DEFAULT 0
       )
     ''');
+
+    // Cached server transactions (v3) — persisted so they're visible offline
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cached_server_transactions (
+        id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        counterparty_name TEXT,
+        amount REAL NOT NULL,
+        nonce TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        settled_at TEXT,
+        PRIMARY KEY (user_id, nonce)
+      )
+    ''');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -110,6 +126,22 @@ class OfflineStorage {
           status TEXT DEFAULT 'pending_sync',
           is_offline INTEGER DEFAULT 1,
           offline_limit_at_time REAL NOT NULL DEFAULT 0
+        )
+      ''');
+    }
+    if (oldVersion < 3) {
+      // v2 → v3: add cached_server_transactions table
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS cached_server_transactions (
+          id TEXT NOT NULL,
+          user_id TEXT NOT NULL,
+          counterparty_name TEXT,
+          amount REAL NOT NULL,
+          nonce TEXT NOT NULL,
+          status TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          settled_at TEXT,
+          PRIMARY KEY (user_id, nonce)
         )
       ''');
     }
@@ -229,5 +261,60 @@ class OfflineStorage {
       "SELECT COALESCE(SUM(amount), 0) as total FROM offline_transactions WHERE status = 'pending_offline'",
     );
     return (result.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  // ─── Cached Server Transactions ────────────────────────────
+
+  /// Upsert server-fetched transactions so they survive offline.
+  Future<void> cacheServerTransactions(
+    List<OfflineTransaction> txs,
+    String userId,
+  ) async {
+    final db = await database;
+    final batch = db.batch();
+    for (final tx in txs) {
+      batch.insert(
+        'cached_server_transactions',
+        {
+          'id': tx.id,
+          'user_id': userId,
+          'counterparty_name': tx.receiverName ?? '',
+          'amount': tx.amount,
+          'nonce': tx.nonce,
+          'status': tx.status,
+          'created_at': tx.createdAt,
+          'settled_at': tx.settledAt,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
+  /// Load all cached server transactions for a user, newest first.
+  Future<List<OfflineTransaction>> getCachedServerTransactions(
+    String userId,
+  ) async {
+    final db = await database;
+    final rows = await db.query(
+      'cached_server_transactions',
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      orderBy: 'created_at DESC',
+    );
+    return rows.map((r) {
+      return OfflineTransaction(
+        id: r['id'] as String,
+        tokenId: '',
+        senderId: '',
+        receiverName: r['counterparty_name'] as String?,
+        amount: (r['amount'] as num).toDouble(),
+        nonce: r['nonce'] as String,
+        signature: '',
+        status: r['status'] as String,
+        createdAt: r['created_at'] as String,
+        settledAt: r['settled_at'] as String?,
+      );
+    }).toList();
   }
 }

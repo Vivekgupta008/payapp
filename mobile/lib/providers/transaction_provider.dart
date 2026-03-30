@@ -43,7 +43,7 @@ class TransactionProvider extends ChangeNotifier {
   bool get isSyncing => _isSyncing;
   String? get lastSyncError => _lastSyncError;
 
-  /// Load transactions from local storage (token-based + blob-based)
+  /// Load transactions from local storage (token-based + blob-based + cached server).
   Future<void> loadLocalTransactions({String? userId}) async {
     if (userId != null) {
       _transactions = await _storage.getTransactionsForUser(userId);
@@ -55,6 +55,8 @@ class TransactionProvider extends ChangeNotifier {
         ...sentBlobs.map((b) => _blobToTransaction(b, isOutgoing: true)),
         ...receivedBlobs.map((b) => _blobToTransaction(b, isOutgoing: false)),
       ];
+      // Load cached server transactions so history shows even when offline
+      _serverTransactions = await _storage.getCachedServerTransactions(userId);
     } else {
       _transactions = await _storage.getAllTransactions();
       _blobTransactions = [];
@@ -131,14 +133,14 @@ class TransactionProvider extends ChangeNotifier {
     }
   }
 
-  /// Fetch transaction history from server
-  Future<void> fetchServerTransactions({bool isUser = true}) async {
+  /// Fetch transaction history from server and persist to SQLite cache.
+  Future<void> fetchServerTransactions({bool isUser = true, String? userId}) async {
     try {
       final endpoint = isUser ? '/api/dashboard/user' : '/api/dashboard/merchant';
       final response = await _api.get(endpoint);
       final txList = response['recent_transactions'] as List? ?? [];
-      _serverTransactions = txList.map((t) {
-        final serverId= t['id']?.toString() ?? '';
+      final fetched = txList.map((t) {
+        final serverId = t['id']?.toString() ?? '';
         return OfflineTransaction(
           id: serverId,
           tokenId: t['token_id'] ?? '',
@@ -152,9 +154,16 @@ class TransactionProvider extends ChangeNotifier {
           settledAt: t['settled_at']?.toString(),
         );
       }).toList();
+
+      // Persist to SQLite so they're visible offline
+      if (userId != null && fetched.isNotEmpty) {
+        await _storage.cacheServerTransactions(fetched, userId);
+      }
+
+      _serverTransactions = fetched;
       notifyListeners();
     } catch (e) {
-      print('Error fetching server transactions: $e');
+      // Fetching failed (offline) — cached rows already loaded by loadLocalTransactions
     }
   }
 

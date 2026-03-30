@@ -603,20 +603,40 @@ class _MyReceiveQRState extends State<_MyReceiveQR> {
             ),
             child: Column(
               children: [
-                QrImageView(
-                  data: qrData,
-                  version: QrVersions.auto,
-                  size: 240,
-                  backgroundColor: Colors.white,
-                  eyeStyle: const QrEyeStyle(
-                    eyeShape: QrEyeShape.circle,
-                    color: AppTheme.primaryColor,
+                if (_bleStarting)
+                  const SizedBox(
+                    width: 240,
+                    height: 240,
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircularProgressIndicator(),
+                          SizedBox(height: 16),
+                          Text(
+                            'Starting Bluetooth…\nQR will appear when ready.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 13, color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  QrImageView(
+                    data: qrData,
+                    version: QrVersions.auto,
+                    size: 240,
+                    backgroundColor: Colors.white,
+                    eyeStyle: const QrEyeStyle(
+                      eyeShape: QrEyeShape.circle,
+                      color: AppTheme.primaryColor,
+                    ),
+                    dataModuleStyle: const QrDataModuleStyle(
+                      dataModuleShape: QrDataModuleShape.circle,
+                      color: AppTheme.primaryColor,
+                    ),
                   ),
-                  dataModuleStyle: const QrDataModuleStyle(
-                    dataModuleShape: QrDataModuleShape.circle,
-                    color: AppTheme.primaryColor,
-                  ),
-                ),
                 const SizedBox(height: 16),
                 Text(
                   widget.userName,

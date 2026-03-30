@@ -28,7 +28,7 @@ class _MerchantDashboardState extends State<MerchantDashboard> {
       await auth.refreshUser();
       await txProvider.loadLocalTransactions(userId: auth.user?.id);
       if (wallet.isOnline) {
-        await txProvider.fetchServerTransactions(isUser: false);
+        await txProvider.fetchServerTransactions(isUser: false, userId: auth.user?.id);
         await wallet.requestTokens();
       } else {
         await wallet.loadCachedTokens();

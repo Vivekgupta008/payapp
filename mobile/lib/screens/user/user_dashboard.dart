@@ -25,7 +25,7 @@ class _UserDashboardState extends State<UserDashboard> {
     await txProvider.loadLocalTransactions(userId: auth.user?.id);
     if (wallet.isOnline) {
       await wallet.requestTokens();
-      await txProvider.fetchServerTransactions(isUser: true);
+      await txProvider.fetchServerTransactions(isUser: true, userId: auth.user?.id);
     }
   }
 

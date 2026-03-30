@@ -27,7 +27,7 @@ class HistoryScreen extends StatelessWidget {
               icon: const Icon(Icons.sync),
               onPressed: () async {
                 await txProvider.syncTransactions();
-                await txProvider.fetchServerTransactions();
+                await txProvider.fetchServerTransactions(userId: auth.user?.id);
               },
             ),
         ],
@@ -36,7 +36,7 @@ class HistoryScreen extends StatelessWidget {
         onRefresh: () async {
           await txProvider.loadLocalTransactions(userId: auth.user?.id);
           if (wallet.isOnline) {
-            await txProvider.fetchServerTransactions();
+            await txProvider.fetchServerTransactions(userId: auth.user?.id);
           }
         },
         child: ListView(
